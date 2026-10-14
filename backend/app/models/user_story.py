@@ -11,6 +11,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.requirement import Requirement
+    from app.models.task import Task
 
 
 class UserStory(Base):
@@ -76,3 +77,7 @@ class UserStory(Base):
     requirement: Mapped["Requirement"] = relationship(
         back_populates="user_stories",
     )
+    tasks: Mapped[list["Task"]] = relationship(
+    back_populates="user_story",
+    passive_deletes=True,
+)
