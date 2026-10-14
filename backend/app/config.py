@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     postgres_host: str = Field(default="127.0.0.1")
     postgres_port: int = Field(default=5433)
 
+    demo_access_token: SecretStr
+
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",
