@@ -11,6 +11,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.project import Project
+    from app.models.user_story import UserStory
 
 
 class Requirement(Base):
@@ -82,4 +83,8 @@ class Requirement(Base):
 
     project: Mapped["Project"] = relationship(
         back_populates="requirements",
+    )
+    user_stories: Mapped[list["UserStory"]] = relationship(
+        back_populates="requirement",
+        cascade="all, delete-orphan",
     )

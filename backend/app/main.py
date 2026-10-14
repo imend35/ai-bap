@@ -1,9 +1,11 @@
 
 """Initialize the AI BAP FastAPI application."""
+
 from fastapi import FastAPI
 
 from app.routers.projects import router as projects_router
 from app.routers.requirements import router as requirements_router
+from app.routers.user_stories import router as user_stories_router
 
 app = FastAPI(
     title="AI BAP API",
@@ -18,6 +20,6 @@ def health_check() -> dict[str, str]:
     return {"status": "healthy"}
 
 
-app.router.include_router(projects_router)
-
+app.include_router(projects_router)
 app.include_router(requirements_router)
+app.include_router(user_stories_router)
