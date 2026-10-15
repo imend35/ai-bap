@@ -1,31 +1,51 @@
 
-"""Test requirement listing API behavior."""
+"""I test requirement management with JWT authentication and RBAC."""
 
+from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from app.config import get_settings
 from app.database import SessionLocal
 from app.main import app
 from app.models import Project, Requirement
+from app.role_permissions import ADMIN, BUSINESS_ANALYST, REVIEWER
+from app.security import get_current_user
+
 
 client = TestClient(app)
+BASE_URL = "/api/v1/requirements"
 
 
-def get_auth_headers() -> dict[str, str]:
-    """Return valid authentication headers for API tests."""
-    token = get_settings().demo_access_token.get_secret_value()
-    return {"Authorization": f"Bearer {token}"}
+@pytest.fixture
+def authenticated_user():
+    """I provide a configurable authenticated user for API tests."""
+
+    user = SimpleNamespace(
+        id=uuid4(),
+        role=BUSINESS_ANALYST,
+        is_active=True,
+    )
+
+    # I override authentication without exposing real credentials.
+    app.dependency_overrides[get_current_user] = lambda: user
+
+    yield user
+
+    # I restore the original authentication dependency after each test.
+    app.dependency_overrides.pop(get_current_user, None)
 
 
-def test_list_requirements_for_existing_project():
-    """Verify that an existing project returns a requirement list."""
+@pytest.fixture
+def test_project():
+    """I create and clean up a temporary PostgreSQL project."""
+
     with SessionLocal() as db:
         project = Project(
-            name="AI BAP Requirements Test",
-            description="Temporary project for requirement listing",
+            name="AI BAP Requirements JWT Test",
+            description="Temporary project for requirement API tests",
             status="planned",
         )
         db.add(project)
@@ -33,100 +53,145 @@ def test_list_requirements_for_existing_project():
         db.refresh(project)
         project_id = project.id
 
-    try:
-        response = client.get(
-            "/api/v1/requirements",
-            params={"project_id": str(project_id)},
-            headers=get_auth_headers(),
+    yield project_id
+
+    # I remove the temporary project and its requirements.
+    with SessionLocal() as db:
+        project = db.get(Project, project_id)
+
+        if project is not None:
+            db.delete(project)
+            db.commit()
+
+
+@pytest.fixture
+def test_requirement(test_project):
+    """I create a temporary requirement for detail and update tests."""
+
+    with SessionLocal() as db:
+        requirement = Requirement(
+            project_id=test_project,
+            title="User Authentication",
+            description="Users must sign in securely.",
+            priority="medium",
+            status="draft",
         )
+        db.add(requirement)
+        db.commit()
+        db.refresh(requirement)
+        requirement_id = requirement.id
 
-        assert response.status_code == status.HTTP_200_OK
-
-        data = response.json()
-
-        assert data["items"] == []
-        assert data["total"] == 0
-        assert data["limit"] == 20
-        assert data["offset"] == 0
-    finally:
-        # Remove the temporary project after verification.
-        with SessionLocal() as db:
-            project = db.get(Project, project_id)
-
-            if project is not None:
-                db.delete(project)
-                db.commit()
+    return requirement_id
 
 
-def test_list_requirements_for_nonexistent_project():
-    """Verify that an unknown project returns HTTP 404."""
+def requirement_payload(project_id):
+    """I build a valid requirement creation payload."""
+
+    return {
+        "project_id": str(project_id),
+        "title": "User Authentication",
+        "description": "Users must sign in securely.",
+        "priority": "high",
+        "status": "draft",
+    }
+
+
+def test_list_requirements_for_existing_project(
+    authenticated_user,
+    test_project,
+):
+    """I verify that an existing project returns its requirements."""
+
     response = client.get(
-        "/api/v1/requirements",
+        BASE_URL,
+        params={"project_id": str(test_project)},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    data = response.json()
+
+    assert data["items"] == []
+    assert data["total"] == 0
+    assert data["limit"] == 20
+    assert data["offset"] == 0
+
+
+def test_list_requirements_for_nonexistent_project(authenticated_user):
+    """I verify that an unknown project returns HTTP 404."""
+
+    response = client.get(
+        BASE_URL,
         params={"project_id": str(uuid4())},
-        headers=get_auth_headers(),
     )
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.json()["detail"] == "Project not found."
 
 
-def test_list_requirements_without_project_id():
-    """Verify that project_id is a required query parameter."""
-    response = client.get(
-        "/api/v1/requirements",
-        headers=get_auth_headers(),
-    )
+def test_list_requirements_without_project_id(authenticated_user):
+    """I verify that project_id is a required query parameter."""
+
+    response = client.get(BASE_URL)
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
-def test_list_requirements_with_invalid_project_id():
-    """Verify that an invalid project UUID is rejected."""
+def test_list_requirements_with_invalid_project_id(authenticated_user):
+    """I verify that invalid project identifiers are rejected."""
+
     response = client.get(
-        "/api/v1/requirements",
+        BASE_URL,
         params={"project_id": "invalid-uuid"},
-        headers=get_auth_headers(),
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 def test_list_requirements_without_token():
-    """Verify that requirement listing requires authentication."""
+    """I reject unauthenticated requirement listing requests."""
+
     response = client.get(
-        "/api/v1/requirements",
+        BASE_URL,
         params={"project_id": str(uuid4())},
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.json()["detail"] == "Missing bearer token."
 
 
 def test_list_requirements_with_invalid_token():
-    """Verify that invalid authentication credentials are rejected."""
+    """I reject invalid JWT credentials."""
+
     response = client.get(
-        "/api/v1/requirements",
+        BASE_URL,
         params={"project_id": str(uuid4())},
-        headers={"Authorization": "Bearer invalid-demo-token"},
+        headers={"Authorization": "Bearer invalid-jwt-token"},
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.json()["detail"] == "Invalid or expired access token."
 
 
-def test_list_requirements_with_invalid_limit():
-    """Verify that pagination limits must be valid."""
+def test_list_requirements_with_invalid_limit(authenticated_user):
+    """I reject pagination limits outside the allowed range."""
+
     response = client.get(
-        "/api/v1/requirements",
+        BASE_URL,
         params={
             "project_id": str(uuid4()),
             "limit": 0,
         },
-        headers=get_auth_headers(),
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
-def test_list_requirements_filters_by_project_and_paginates():
-    """Verify project filtering, pagination, and total counts."""
+
+def test_list_requirements_filters_by_project_and_paginates(
+    authenticated_user,
+):
+    """I verify project filtering, pagination, and total counts."""
+
     with SessionLocal() as db:
         first_project = Project(
             name="AI BAP Requirements Project A",
@@ -172,13 +237,12 @@ def test_list_requirements_filters_by_project_and_paginates():
 
     try:
         first_response = client.get(
-            "/api/v1/requirements",
+            BASE_URL,
             params={
                 "project_id": str(first_project_id),
                 "limit": 1,
                 "offset": 0,
             },
-            headers=get_auth_headers(),
         )
 
         assert first_response.status_code == status.HTTP_200_OK
@@ -192,13 +256,12 @@ def test_list_requirements_filters_by_project_and_paginates():
         assert first_page["items"][0]["project_id"] == str(first_project_id)
 
         second_response = client.get(
-            "/api/v1/requirements",
+            BASE_URL,
             params={
                 "project_id": str(first_project_id),
                 "limit": 1,
                 "offset": 1,
             },
-            headers=get_auth_headers(),
         )
 
         assert second_response.status_code == status.HTTP_200_OK
@@ -210,12 +273,14 @@ def test_list_requirements_filters_by_project_and_paginates():
         assert len(second_page["items"]) == 1
         assert second_page["items"][0]["project_id"] == str(first_project_id)
 
-        assert first_page["items"][0]["id"] != second_page["items"][0]["id"]
+        assert (
+            first_page["items"][0]["id"]
+            != second_page["items"][0]["id"]
+        )
 
         other_response = client.get(
-            "/api/v1/requirements",
+            BASE_URL,
             params={"project_id": str(second_project_id)},
-            headers=get_auth_headers(),
         )
 
         assert other_response.status_code == status.HTTP_200_OK
@@ -227,7 +292,7 @@ def test_list_requirements_filters_by_project_and_paginates():
         assert other_page["items"][0]["project_id"] == str(second_project_id)
 
     finally:
-        # Remove temporary projects and their associated requirements.
+        # I clean up both projects and their associated requirements.
         with SessionLocal() as db:
             for project_id in (first_project_id, second_project_id):
                 project = db.get(Project, project_id)
@@ -238,397 +303,393 @@ def test_list_requirements_filters_by_project_and_paginates():
             db.commit()
 
 
-def test_create_requirement_successfully():
-    """Verify that a requirement is created and stored in PostgreSQL."""
-    with SessionLocal() as db:
-        project = Project(
-            name="AI BAP Requirement Creation Test",
-            status="planned",
-        )
-        db.add(project)
-        db.commit()
-        db.refresh(project)
-        project_id = project.id
+def test_create_requirement_successfully(
+    authenticated_user,
+    test_project,
+):
+    """I verify requirement creation and PostgreSQL persistence."""
 
-    try:
-        response = client.post(
-            "/api/v1/requirements",
-            json={
-                "project_id": str(project_id),
-                "title": "User Authentication",
-                "description": "Users must sign in securely.",
-                "priority": "high",
-                "status": "draft",
-            },
-            headers=get_auth_headers(),
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-
-        data = response.json()
-
-        assert data["project_id"] == str(project_id)
-        assert data["title"] == "User Authentication"
-        assert data["description"] == "Users must sign in securely."
-        assert data["priority"] == "high"
-        assert data["status"] == "draft"
-        assert data["id"]
-        assert data["created_at"]
-        assert data["updated_at"]
-
-        # Verify that the requirement was persisted in PostgreSQL.
-        with SessionLocal() as db:
-            requirement = db.get(Requirement, data["id"])
-
-            assert requirement is not None
-            assert requirement.project_id == project_id
-            assert requirement.title == "User Authentication"
-
-    finally:
-        # Remove the temporary project and its requirements.
-        with SessionLocal() as db:
-            project = db.get(Project, project_id)
-
-            if project is not None:
-                db.delete(project)
-                db.commit()
-
-
-def test_create_requirement_with_default_values():
-    """Verify that omitted priority and status use default values."""
-    with SessionLocal() as db:
-        project = Project(
-            name="AI BAP Requirement Defaults Test",
-            status="planned",
-        )
-        db.add(project)
-        db.commit()
-        db.refresh(project)
-        project_id = project.id
-
-    try:
-        response = client.post(
-            "/api/v1/requirements",
-            json={
-                "project_id": str(project_id),
-                "title": "Generate User Stories",
-                "description": "The system must generate user stories.",
-            },
-            headers=get_auth_headers(),
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.json()["priority"] == "medium"
-        assert response.json()["status"] == "draft"
-
-    finally:
-        # Remove temporary test data.
-        with SessionLocal() as db:
-            project = db.get(Project, project_id)
-
-            if project is not None:
-                db.delete(project)
-                db.commit()
-
-
-def test_create_requirement_for_nonexistent_project():
-    """Verify that an unknown project returns HTTP 404."""
     response = client.post(
-        "/api/v1/requirements",
+        BASE_URL,
+        json=requirement_payload(test_project),
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+
+    data = response.json()
+
+    assert data["project_id"] == str(test_project)
+    assert data["title"] == "User Authentication"
+    assert data["description"] == "Users must sign in securely."
+    assert data["priority"] == "high"
+    assert data["status"] == "draft"
+    assert data["id"]
+    assert data["created_at"]
+    assert data["updated_at"]
+
+    # I confirm that the requirement was saved in PostgreSQL.
+    with SessionLocal() as db:
+        requirement = db.get(Requirement, data["id"])
+
+        assert requirement is not None
+        assert requirement.project_id == test_project
+        assert requirement.title == "User Authentication"
+
+
+def test_create_requirement_with_default_values(
+    authenticated_user,
+    test_project,
+):
+    """I verify default priority and status values."""
+
+    response = client.post(
+        BASE_URL,
         json={
-            "project_id": str(uuid4()),
-            "title": "User Authentication",
-            "description": "Users must sign in securely.",
+            "project_id": str(test_project),
+            "title": "Generate User Stories",
+            "description": "The system must generate user stories.",
         },
-        headers=get_auth_headers(),
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["priority"] == "medium"
+    assert response.json()["status"] == "draft"
+
+
+def test_create_requirement_for_nonexistent_project(authenticated_user):
+    """I reject creation when the parent project does not exist."""
+
+    response = client.post(
+        BASE_URL,
+        json=requirement_payload(uuid4()),
     )
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.json()["detail"] == "Project not found."
 
 
-def test_create_requirement_without_project_id():
-    """Verify that project_id is required in the request body."""
+def test_create_requirement_without_project_id(authenticated_user):
+    """I reject creation without a project identifier."""
+
     response = client.post(
-        "/api/v1/requirements",
+        BASE_URL,
         json={
             "title": "User Authentication",
             "description": "Users must sign in securely.",
         },
-        headers=get_auth_headers(),
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
-def test_create_requirement_with_invalid_priority():
-    """Verify that unsupported priority values are rejected."""
-    response = client.post(
-        "/api/v1/requirements",
-        json={
-            "project_id": str(uuid4()),
-            "title": "User Authentication",
-            "description": "Users must sign in securely.",
-            "priority": "urgent",
-        },
-        headers=get_auth_headers(),
-    )
+def test_create_requirement_with_invalid_priority(authenticated_user):
+    """I reject unsupported requirement priorities."""
+
+    payload = requirement_payload(uuid4())
+    payload["priority"] = "urgent"
+
+    response = client.post(BASE_URL, json=payload)
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
-def test_create_requirement_with_long_description():
-    """Verify that descriptions exceeding 5000 characters are rejected."""
-    response = client.post(
-        "/api/v1/requirements",
-        json={
-            "project_id": str(uuid4()),
-            "title": "User Authentication",
-            "description": "A" * 5001,
-        },
-        headers=get_auth_headers(),
-    )
+def test_create_requirement_with_long_description(authenticated_user):
+    """I reject descriptions longer than the allowed limit."""
+
+    payload = requirement_payload(uuid4())
+    payload["description"] = "A" * 5001
+
+    response = client.post(BASE_URL, json=payload)
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 def test_create_requirement_without_token():
-    """Verify that requirement creation requires authentication."""
+    """I reject requirement creation without authentication."""
+
     response = client.post(
-        "/api/v1/requirements",
-        json={
-            "project_id": str(uuid4()),
-            "title": "User Authentication",
-            "description": "Users must sign in securely.",
-        },
+        BASE_URL,
+        json=requirement_payload(uuid4()),
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 def test_create_requirement_with_invalid_token():
-    """Verify that invalid credentials are rejected."""
+    """I reject requirement creation with an invalid JWT."""
+
     response = client.post(
-        "/api/v1/requirements",
-        json={
-            "project_id": str(uuid4()),
-            "title": "User Authentication",
-            "description": "Users must sign in securely.",
-        },
-        headers={"Authorization": "Bearer invalid-demo-token"},
+        BASE_URL,
+        json=requirement_payload(uuid4()),
+        headers={"Authorization": "Bearer invalid-jwt-token"},
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-def test_get_requirement_successfully():
-    """Verify that an existing requirement can be retrieved by ID."""
-    with SessionLocal() as db:
-        project = Project(
-            name="AI BAP Requirement Detail Test",
-            status="planned",
-        )
-        db.add(project)
-        db.flush()
+def test_get_requirement_successfully(
+    authenticated_user,
+    test_project,
+    test_requirement,
+):
+    """I retrieve an existing requirement by its identifier."""
 
-        requirement = Requirement(
-            project_id=project.id,
-            title="User Authentication",
-            description="Users must sign in securely.",
-            priority="high",
-            status="draft",
-        )
-        db.add(requirement)
-        db.commit()
-
-        project_id = project.id
-        requirement_id = requirement.id
-
-    try:
-        response = client.get(
-            f"/api/v1/requirements/{requirement_id}",
-            headers=get_auth_headers(),
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-
-        data = response.json()
-
-        assert data["id"] == str(requirement_id)
-        assert data["project_id"] == str(project_id)
-        assert data["title"] == "User Authentication"
-        assert data["description"] == "Users must sign in securely."
-        assert data["priority"] == "high"
-        assert data["status"] == "draft"
-        assert data["created_at"]
-        assert data["updated_at"]
-
-    finally:
-        # Remove the temporary project and its requirements.
-        with SessionLocal() as db:
-            project = db.get(Project, project_id)
-
-            if project is not None:
-                db.delete(project)
-                db.commit()
-
-
-def test_get_nonexistent_requirement():
-    """Verify that an unknown requirement returns HTTP 404."""
     response = client.get(
-        f"/api/v1/requirements/{uuid4()}",
-        headers=get_auth_headers(),
+        f"{BASE_URL}/{test_requirement}",
     )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    data = response.json()
+
+    assert data["id"] == str(test_requirement)
+    assert data["project_id"] == str(test_project)
+    assert data["title"] == "User Authentication"
+    assert data["description"] == "Users must sign in securely."
+    assert data["priority"] == "medium"
+    assert data["status"] == "draft"
+    assert data["created_at"]
+    assert data["updated_at"]
+
+
+def test_get_nonexistent_requirement(authenticated_user):
+    """I return HTTP 404 for an unknown requirement."""
+
+    response = client.get(f"{BASE_URL}/{uuid4()}")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.json()["detail"] == "Requirement not found."
 
 
-def test_get_requirement_with_invalid_uuid():
-    """Verify that an invalid requirement UUID returns HTTP 422."""
-    response = client.get(
-        "/api/v1/requirements/invalid-uuid",
-        headers=get_auth_headers(),
-    )
+def test_get_requirement_with_invalid_uuid(authenticated_user):
+    """I reject malformed requirement identifiers."""
+
+    response = client.get(f"{BASE_URL}/invalid-uuid")
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 def test_get_requirement_without_token():
-    """Verify that requirement details require authentication."""
-    response = client.get(
-        f"/api/v1/requirements/{uuid4()}",
-    )
+    """I reject unauthenticated requirement detail requests."""
+
+    response = client.get(f"{BASE_URL}/{uuid4()}")
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-def test_update_requirement_partially_and_persist_changes():
-    """Verify partial updates preserve other fields and persist in PostgreSQL."""
-    with SessionLocal() as db:
-        project = Project(
-            name="AI BAP Requirement Update Test",
-            status="planned",
-        )
-        db.add(project)
-        db.flush()
+def test_update_requirement_partially_and_persist_changes(
+    authenticated_user,
+    test_project,
+    test_requirement,
+):
+    """I update selected fields and preserve unchanged values."""
 
-        requirement = Requirement(
-            project_id=project.id,
-            title="User Authentication",
-            description="Users must sign in securely.",
-            priority="medium",
-            status="draft",
-        )
-        db.add(requirement)
-        db.commit()
-
-        project_id = project.id
-        requirement_id = requirement.id
-
-    try:
-        response = client.patch(
-            f"/api/v1/requirements/{requirement_id}",
-            json={
-                "priority": "critical",
-                "status": "in_review",
-            },
-            headers=get_auth_headers(),
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-
-        data = response.json()
-
-        assert data["id"] == str(requirement_id)
-        assert data["project_id"] == str(project_id)
-        assert data["title"] == "User Authentication"
-        assert data["description"] == "Users must sign in securely."
-        assert data["priority"] == "critical"
-        assert data["status"] == "in_review"
-
-        # Verify that the changes were persisted in PostgreSQL.
-        with SessionLocal() as db:
-            saved_requirement = db.get(Requirement, requirement_id)
-
-            assert saved_requirement is not None
-            assert saved_requirement.project_id == project_id
-            assert saved_requirement.title == "User Authentication"
-            assert saved_requirement.description == "Users must sign in securely."
-            assert saved_requirement.priority == "critical"
-            assert saved_requirement.status == "in_review"
-
-    finally:
-        # Remove the temporary project and its requirements.
-        with SessionLocal() as db:
-            project = db.get(Project, project_id)
-
-            if project is not None:
-                db.delete(project)
-                db.commit()
-
-
-def test_update_nonexistent_requirement():
-    """Verify that updating an unknown requirement returns HTTP 404."""
     response = client.patch(
-        f"/api/v1/requirements/{uuid4()}",
+        f"{BASE_URL}/{test_requirement}",
+        json={
+            "priority": "critical",
+            "status": "in_review",
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    data = response.json()
+
+    assert data["id"] == str(test_requirement)
+    assert data["project_id"] == str(test_project)
+    assert data["title"] == "User Authentication"
+    assert data["description"] == "Users must sign in securely."
+    assert data["priority"] == "critical"
+    assert data["status"] == "in_review"
+
+    # I verify that the updated fields were persisted in PostgreSQL.
+    with SessionLocal() as db:
+        saved_requirement = db.get(Requirement, test_requirement)
+
+        assert saved_requirement is not None
+        assert saved_requirement.project_id == test_project
+        assert saved_requirement.title == "User Authentication"
+        assert saved_requirement.description == "Users must sign in securely."
+        assert saved_requirement.priority == "critical"
+        assert saved_requirement.status == "in_review"
+
+
+def test_update_nonexistent_requirement(authenticated_user):
+    """I return HTTP 404 when updating an unknown requirement."""
+
+    response = client.patch(
+        f"{BASE_URL}/{uuid4()}",
         json={"priority": "high"},
-        headers=get_auth_headers(),
     )
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.json()["detail"] == "Requirement not found."
 
 
-def test_update_requirement_with_invalid_uuid():
-    """Verify that an invalid requirement UUID returns HTTP 422."""
+def test_update_requirement_with_invalid_uuid(authenticated_user):
+    """I reject malformed identifiers in update requests."""
+
     response = client.patch(
-        "/api/v1/requirements/invalid-uuid",
+        f"{BASE_URL}/invalid-uuid",
         json={"priority": "high"},
-        headers=get_auth_headers(),
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
-def test_update_requirement_with_empty_payload():
-    """Verify that empty PATCH requests are rejected."""
+def test_update_requirement_with_empty_payload(authenticated_user):
+    """I reject empty requirement update payloads."""
+
     response = client.patch(
-        f"/api/v1/requirements/{uuid4()}",
+        f"{BASE_URL}/{uuid4()}",
         json={},
-        headers=get_auth_headers(),
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
-def test_update_requirement_with_invalid_priority():
-    """Verify that unsupported priority values are rejected."""
+def test_update_requirement_with_invalid_priority(authenticated_user):
+    """I reject invalid priority values in update requests."""
+
     response = client.patch(
-        f"/api/v1/requirements/{uuid4()}",
+        f"{BASE_URL}/{uuid4()}",
         json={"priority": "urgent"},
-        headers=get_auth_headers(),
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
-def test_update_requirement_with_null_status():
-    """Verify that null values cannot replace required fields."""
+def test_update_requirement_with_null_status(authenticated_user):
+    """I reject null values for required status fields."""
+
     response = client.patch(
-        f"/api/v1/requirements/{uuid4()}",
+        f"{BASE_URL}/{uuid4()}",
         json={"status": None},
-        headers=get_auth_headers(),
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 def test_update_requirement_without_token():
-    """Verify that updating requirements requires authentication."""
+    """I reject unauthenticated requirement update requests."""
+
     response = client.patch(
-        f"/api/v1/requirements/{uuid4()}",
+        f"{BASE_URL}/{uuid4()}",
         json={"priority": "high"},
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.parametrize(
+    "role",
+    [ADMIN, BUSINESS_ANALYST, REVIEWER],
+)
+def test_authorized_roles_can_list_requirements(
+    authenticated_user,
+    test_project,
+    role,
+):
+    """I allow all supported roles to list requirements."""
+
+    authenticated_user.role = role
+
+    response = client.get(
+        BASE_URL,
+        params={"project_id": str(test_project)},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.parametrize(
+    "role",
+    [ADMIN, BUSINESS_ANALYST, REVIEWER],
+)
+def test_authorized_roles_can_view_requirement(
+    authenticated_user,
+    test_requirement,
+    role,
+):
+    """I allow all supported roles to view requirement details."""
+
+    authenticated_user.role = role
+
+    response = client.get(f"{BASE_URL}/{test_requirement}")
+
+    assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.parametrize(
+    "role",
+    [ADMIN, BUSINESS_ANALYST],
+)
+def test_editing_roles_can_create_requirements(
+    authenticated_user,
+    test_project,
+    role,
+):
+    """I allow administrators and analysts to create requirements."""
+
+    authenticated_user.role = role
+
+    response = client.post(
+        BASE_URL,
+        json=requirement_payload(test_project),
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+
+
+@pytest.mark.parametrize(
+    "role",
+    [ADMIN, BUSINESS_ANALYST],
+)
+def test_editing_roles_can_update_requirements(
+    authenticated_user,
+    test_requirement,
+    role,
+):
+    """I allow administrators and analysts to update requirements."""
+
+    authenticated_user.role = role
+
+    response = client.patch(
+        f"{BASE_URL}/{test_requirement}",
+        json={"priority": "high"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+
+def test_reviewer_cannot_create_requirement(
+    authenticated_user,
+    test_project,
+):
+    """I prevent reviewers from creating requirements."""
+
+    authenticated_user.role = REVIEWER
+
+    response = client.post(
+        BASE_URL,
+        json=requirement_payload(test_project),
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_reviewer_cannot_update_requirement(
+    authenticated_user,
+    test_requirement,
+):
+    """I prevent reviewers from updating requirements."""
+
+    authenticated_user.role = REVIEWER
+
+    response = client.patch(
+        f"{BASE_URL}/{test_requirement}",
+        json={"priority": "high"},
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN

@@ -1,5 +1,5 @@
 
-"""Provide API endpoints for requirement management."""
+"""I provide JWT-protected API endpoints for requirement management."""
 
 from typing import Annotated
 from uuid import UUID
@@ -10,29 +10,40 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Project, Requirement
+from app.role_permissions import (
+    ADMIN,
+    BUSINESS_ANALYST,
+    REVIEWER,
+    require_roles,
+)
 from app.schemas.requirement import (
     RequirementCreate,
     RequirementListResponse,
     RequirementResponse,
     RequirementUpdate,
 )
-from app.security import verify_demo_token
+
 
 router = APIRouter(
     prefix="/api/v1/requirements",
     tags=["Requirements"],
-    dependencies=[Depends(verify_demo_token)],
 )
 
 
-@router.get("", response_model=RequirementListResponse)
+@router.get(
+    "",
+    response_model=RequirementListResponse,
+    dependencies=[Depends(require_roles(ADMIN, BUSINESS_ANALYST, REVIEWER))],
+)
 def list_requirements(
     project_id: UUID,
     db: Annotated[Session, Depends(get_db)],
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> RequirementListResponse:
-    """Return a paginated list of requirements for a project."""
+    """I return a paginated list of requirements for an authorized user."""
+
+    # I verify that the requested project exists.
     project = db.get(Project, project_id)
 
     if project is None:
@@ -41,12 +52,14 @@ def list_requirements(
             detail="Project not found.",
         )
 
+    # I count the requirements belonging to the selected project.
     total = db.scalar(
         select(func.count())
         .select_from(Requirement)
         .where(Requirement.project_id == project_id)
     ) or 0
 
+    # I retrieve requirements using consistent pagination and ordering.
     statement = (
         select(Requirement)
         .where(Requirement.project_id == project_id)
@@ -69,12 +82,15 @@ def list_requirements(
     "",
     response_model=RequirementResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_roles(ADMIN, BUSINESS_ANALYST))],
 )
 def create_requirement(
     payload: RequirementCreate,
     db: Annotated[Session, Depends(get_db)],
 ) -> Requirement:
-    """Create a new requirement for an existing project."""
+    """I create a requirement when the user has editing permissions."""
+
+    # I ensure that the parent project exists before creating a requirement.
     project = db.get(Project, payload.project_id)
 
     if project is None:
@@ -83,6 +99,7 @@ def create_requirement(
             detail="Project not found.",
         )
 
+    # I preserve the existing requirement creation behavior.
     requirement = Requirement(
         project_id=payload.project_id,
         title=payload.title,
@@ -101,12 +118,15 @@ def create_requirement(
 @router.get(
     "/{requirement_id}",
     response_model=RequirementResponse,
+    dependencies=[Depends(require_roles(ADMIN, BUSINESS_ANALYST, REVIEWER))],
 )
 def get_requirement(
     requirement_id: UUID,
     db: Annotated[Session, Depends(get_db)],
 ) -> Requirement:
-    """Return a single requirement by its unique identifier."""
+    """I return an existing requirement to an authorized user."""
+
+    # I retrieve the requested requirement by its unique identifier.
     requirement = db.get(Requirement, requirement_id)
 
     if requirement is None:
@@ -121,13 +141,16 @@ def get_requirement(
 @router.patch(
     "/{requirement_id}",
     response_model=RequirementResponse,
+    dependencies=[Depends(require_roles(ADMIN, BUSINESS_ANALYST))],
 )
 def update_requirement(
     requirement_id: UUID,
     payload: RequirementUpdate,
     db: Annotated[Session, Depends(get_db)],
 ) -> Requirement:
-    """Update only the provided fields of an existing requirement."""
+    """I update a requirement when the user has editing permissions."""
+
+    # I verify that the requirement exists before applying changes.
     requirement = db.get(Requirement, requirement_id)
 
     if requirement is None:
@@ -136,11 +159,16 @@ def update_requirement(
             detail="Requirement not found.",
         )
 
-    update_data = payload.model_dump(exclude_unset=True, mode="json")
+    # I update only the fields explicitly provided in the request.
+    update_data = payload.model_dump(
+        exclude_unset=True,
+        mode="json",
+    )
 
     for field_name, value in update_data.items():
         setattr(requirement, field_name, value)
 
+    # I save the changes and refresh the requirement.
     db.commit()
     db.refresh(requirement)
 
