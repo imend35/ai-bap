@@ -1,5 +1,5 @@
 
-"""Provide API endpoints for task management."""
+"""I provide secure API endpoints for task management."""
 
 from typing import Annotated
 from uuid import UUID
@@ -10,19 +10,23 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Requirement, Sprint, Task, UserStory
+from app.role_permissions import (
+    ADMIN,
+    BUSINESS_ANALYST,
+    REVIEWER,
+    require_roles,
+)
 from app.schemas.task import (
     TaskCreate,
     TaskListResponse,
     TaskResponse,
     TaskUpdate,
 )
-from app.security import verify_demo_token
 
 
 router = APIRouter(
     prefix="/api/v1/tasks",
     tags=["Tasks"],
-    dependencies=[Depends(verify_demo_token)],
 )
 
 
@@ -31,7 +35,9 @@ def validate_task_sprint(
     story_id: UUID,
     sprint_id: UUID,
 ) -> None:
-    """Validate that the sprint exists and belongs to the task's project."""
+    """I verify that a sprint exists and belongs to the task's project."""
+
+    # I reject sprint assignments referencing unknown sprints.
     sprint = db.get(Sprint, sprint_id)
 
     if sprint is None:
@@ -40,12 +46,14 @@ def validate_task_sprint(
             detail="Sprint not found.",
         )
 
+    # I determine the project associated with the selected user story.
     project_id = db.scalar(
         select(Requirement.project_id)
         .join(UserStory, UserStory.requirement_id == Requirement.id)
         .where(UserStory.id == story_id)
     )
 
+    # I prevent tasks from being assigned to another project's sprint.
     if project_id != sprint.project_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -53,14 +61,22 @@ def validate_task_sprint(
         )
 
 
-@router.get("", response_model=TaskListResponse)
+@router.get(
+    "",
+    response_model=TaskListResponse,
+    dependencies=[
+        Depends(require_roles(ADMIN, BUSINESS_ANALYST, REVIEWER))
+    ],
+)
 def list_tasks(
     story_id: UUID,
     db: Annotated[Session, Depends(get_db)],
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TaskListResponse:
-    """Return a paginated list of tasks for a user story."""
+    """I return a paginated list of tasks for a user story."""
+
+    # I verify that the requested user story exists.
     story = db.get(UserStory, story_id)
 
     if story is None:
@@ -69,12 +85,14 @@ def list_tasks(
             detail="User Story not found.",
         )
 
+    # I count the tasks associated with the selected user story.
     total = db.scalar(
         select(func.count())
         .select_from(Task)
         .where(Task.story_id == story_id)
     ) or 0
 
+    # I retrieve tasks using stable ordering and pagination.
     statement = (
         select(Task)
         .where(Task.story_id == story_id)
@@ -97,12 +115,17 @@ def list_tasks(
     "",
     response_model=TaskResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(require_roles(ADMIN, BUSINESS_ANALYST))
+    ],
 )
 def create_task(
     payload: TaskCreate,
     db: Annotated[Session, Depends(get_db)],
 ) -> Task:
-    """Create a task only for an approved user story."""
+    """I create a task only for an approved user story."""
+
+    # I verify that the selected user story exists.
     story = db.get(UserStory, payload.story_id)
 
     if story is None:
@@ -111,12 +134,14 @@ def create_task(
             detail="User Story not found.",
         )
 
+    # I prevent task creation before the user story is approved.
     if story.status != "approved":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tasks can only be created for approved user stories.",
         )
 
+    # I verify that the selected sprint belongs to the same project.
     if payload.sprint_id is not None:
         validate_task_sprint(
             db=db,
@@ -124,6 +149,7 @@ def create_task(
             sprint_id=payload.sprint_id,
         )
 
+    # I create the task using the validated request data.
     task = Task(
         story_id=payload.story_id,
         sprint_id=payload.sprint_id,
@@ -132,6 +158,7 @@ def create_task(
         status=payload.status.value,
     )
 
+    # I persist the new task and reload its database-generated fields.
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -142,12 +169,17 @@ def create_task(
 @router.get(
     "/{task_id}",
     response_model=TaskResponse,
+    dependencies=[
+        Depends(require_roles(ADMIN, BUSINESS_ANALYST, REVIEWER))
+    ],
 )
 def get_task(
     task_id: UUID,
     db: Annotated[Session, Depends(get_db)],
 ) -> Task:
-    """Return a single task by its unique identifier."""
+    """I return a task by its unique identifier."""
+
+    # I retrieve the requested task from the database.
     task = db.get(Task, task_id)
 
     if task is None:
@@ -162,13 +194,18 @@ def get_task(
 @router.patch(
     "/{task_id}",
     response_model=TaskResponse,
+    dependencies=[
+        Depends(require_roles(ADMIN, BUSINESS_ANALYST))
+    ],
 )
 def update_task(
     task_id: UUID,
     payload: TaskUpdate,
     db: Annotated[Session, Depends(get_db)],
 ) -> Task:
-    """Update provided task fields and validate sprint assignments."""
+    """I update task fields while validating sprint assignments."""
+
+    # I verify that the requested task exists.
     task = db.get(Task, task_id)
 
     if task is None:
@@ -177,12 +214,13 @@ def update_task(
             detail="Task not found.",
         )
 
+    # I extract only the fields explicitly provided in the request.
     update_data = payload.model_dump(
         exclude_unset=True,
         mode="json",
     )
 
-    # Sprint atanıyorsa varlığını ve proje uyumunu doğrula.
+    # I verify sprint existence and project consistency when assigned.
     if "sprint_id" in update_data:
         sprint_id = payload.sprint_id
 
@@ -193,10 +231,11 @@ def update_task(
                 sprint_id=sprint_id,
             )
 
-    # Yalnızca istekte gönderilen alanları güncelle.
+    # I apply only the requested changes.
     for field_name, value in update_data.items():
         setattr(task, field_name, value)
 
+    # I persist the changes and refresh the updated task.
     db.commit()
     db.refresh(task)
 
