@@ -1,15 +1,17 @@
 
-"""Provide API endpoints for user story management."""
+"""I provide API endpoints for user story management."""
 
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Requirement, UserStory
+from app.role_permissions import ADMIN, REVIEWER
 from app.schemas.ai_user_story import (
     AIUserStoryGenerateRequest,
     AIUserStoryGenerateResponse,
@@ -20,7 +22,11 @@ from app.schemas.user_story import (
     UserStoryResponse,
     UserStoryUpdate,
 )
-from app.security import verify_demo_token
+from app.security import (
+    bearer_scheme,
+    get_current_user,
+    verify_demo_token,
+)
 from app.services.ai.user_story_generator import (
     AIGenerationError,
     generate_user_story,
@@ -32,7 +38,7 @@ router = APIRouter(
     dependencies=[Depends(verify_demo_token)],
 )
 
-# User Story durumları arasında izin verdiğim geçişleri tanımlıyorum.
+# I define the permitted User Story status transitions.
 ALLOWED_STATUS_TRANSITIONS = {
     "draft": {"in_review"},
     "in_review": {"approved", "rejected"},
@@ -48,7 +54,7 @@ def list_user_stories(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> UserStoryListResponse:
-    """Return a paginated list of user stories for a requirement."""
+    """I return a paginated list of user stories for a requirement."""
 
     requirement = db.get(Requirement, requirement_id)
 
@@ -91,9 +97,9 @@ def create_user_story(
     payload: UserStoryCreate,
     db: Annotated[Session, Depends(get_db)],
 ) -> UserStory:
-    """Create a new user story for an existing requirement."""
+    """I create a new user story for an existing requirement."""
 
-    # İnsan incelemesi olmadan doğrudan onaylı kayıt oluşturulmasını engelliyorum.
+    # I prevent new stories from bypassing human review.
     if payload.status.value != "draft":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -132,9 +138,9 @@ def generate_user_story_draft(
     payload: AIUserStoryGenerateRequest,
     db: Annotated[Session, Depends(get_db)],
 ) -> AIUserStoryGenerateResponse:
-    """Generate an AI-assisted user story draft without saving it."""
+    """I generate an AI-assisted user story draft without saving it."""
 
-    # İlgili gereksinimin veritabanında bulunduğunu kontrol ediyorum.
+    # I verify that the related requirement exists.
     requirement = db.get(Requirement, payload.requirement_id)
 
     if requirement is None:
@@ -144,7 +150,7 @@ def generate_user_story_draft(
         )
 
     try:
-        # Gereksinim bilgilerini AI servisine göndererek taslak oluşturuyorum.
+        # I generate a draft using the requirement details.
         generated_story = generate_user_story(
             requirement_title=requirement.title,
             requirement_description=requirement.description,
@@ -152,13 +158,13 @@ def generate_user_story_draft(
         )
 
     except AIGenerationError as exc:
-        # AI servis hatalarını kontrollü bir API yanıtına dönüştürüyorum.
+        # I convert AI service failures into a controlled API response.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI user story generation is currently unavailable.",
         ) from exc
 
-    # AI taslağını kullanıcı onayı olmadan veritabanına kaydetmiyorum.
+    # I require human review before saving generated content.
     return AIUserStoryGenerateResponse(
         requirement_id=requirement.id,
         title=generated_story.title,
@@ -177,7 +183,7 @@ def get_user_story(
     story_id: UUID,
     db: Annotated[Session, Depends(get_db)],
 ) -> UserStory:
-    """Return a single user story by its unique identifier."""
+    """I return a single user story by its unique identifier."""
 
     story = db.get(UserStory, story_id)
 
@@ -198,8 +204,12 @@ def update_user_story(
     story_id: UUID,
     payload: UserStoryUpdate,
     db: Annotated[Session, Depends(get_db)],
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(bearer_scheme),
+    ],
 ) -> UserStory:
-    """Update an existing user story while enforcing approval rules."""
+    """I update a user story while enforcing approval permissions."""
 
     story = db.get(UserStory, story_id)
 
@@ -217,14 +227,14 @@ def update_user_story(
     current_status = story.status
     requested_status = update_data.get("status")
 
-    # Onaylanmış User Story üzerinde doğrudan değişiklik yapılmasını engelliyorum.
+    # I prevent modifications to approved user stories.
     if current_status == "approved":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Approved User Stories cannot be modified.",
         )
 
-    # Durum değişikliği talep edildiyse geçişin geçerliliğini kontrol ediyorum.
+    # I validate status transitions before applying changes.
     if (
         requested_status is not None
         and requested_status != current_status
@@ -243,7 +253,18 @@ def update_user_story(
                 ),
             )
 
-    # Yalnızca iş kurallarına uygun alanları güncelliyorum.
+    # I reserve approval and rejection decisions for authorized users.
+    if requested_status in {"approved", "rejected"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Approval and rejection require role-based "
+                "JWT authentication, which is not yet enabled "
+                "for this demo-token endpoint."
+            ),
+        )
+
+    # I update only fields permitted by the workflow.
     for field_name, value in update_data.items():
         setattr(story, field_name, value)
 

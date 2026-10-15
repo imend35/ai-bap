@@ -1,5 +1,5 @@
 
-"""Manage application configuration and environment settings."""
+"""I manage application configuration and environment settings."""
 
 from functools import lru_cache
 from pathlib import Path
@@ -13,20 +13,25 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
-    """Manage application settings from environment variables."""
+    """I manage application settings from environment variables."""
 
-    # PostgreSQL bağlantı ayarlarını yönetiyorum.
+    # I manage the PostgreSQL connection settings.
     postgres_db: str = Field(default="ai_bap")
     postgres_user: str = Field(default="ai_bap_user")
     postgres_password: SecretStr
     postgres_host: str = Field(default="127.0.0.1")
     postgres_port: int = Field(default=5433)
 
-    # API erişimi için demo kimlik doğrulamasını kullanıyorum.
+    # I preserve demo authentication for existing API endpoints.
     demo_access_token: SecretStr
 
-    # AI servis ayarlarını ortam değişkenlerinden okuyorum.
-    # API anahtarı bulunmadığında mevcut backend çalışmaya devam edebilir.
+    # I configure JWT authentication without exposing the signing secret.
+    jwt_secret_key: SecretStr = Field(min_length=32)
+    jwt_algorithm: str = Field(default="HS256", pattern="^HS256$")
+    jwt_access_token_expire_minutes: int = Field(default=30, ge=1)
+
+    # I read AI service settings from environment variables.
+    # I allow the backend to run without an OpenAI API key.
     openai_api_key: SecretStr | None = None
     openai_model: str = Field(default="gpt-4.1-mini")
 
@@ -38,7 +43,7 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> URL:
-        """Build the PostgreSQL connection URL safely."""
+        """I build the PostgreSQL connection URL safely."""
         return URL.create(
             drivername="postgresql+psycopg",
             username=self.postgres_user,
@@ -51,5 +56,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return cached application settings."""
+    """I return cached application settings."""
     return Settings()

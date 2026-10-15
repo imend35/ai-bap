@@ -1,13 +1,18 @@
 
-"""Provide bearer token authentication for protected API endpoints."""
+"""I manage demo and JWT authentication for protected API endpoints."""
 
 import secrets
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.database import get_db
+from app.jwt_service import verify_access_token
+from app.models.user import User
+
 
 bearer_scheme = HTTPBearer(
     scheme_name="DemoAccessToken",
@@ -22,7 +27,7 @@ def verify_demo_token(
         Depends(bearer_scheme),
     ],
 ) -> None:
-    """Reject requests without the configured demo access token."""
+    """I verify the configured demo access token."""
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -32,9 +37,59 @@ def verify_demo_token(
 
     expected_token = get_settings().demo_access_token.get_secret_value()
 
-    if not secrets.compare_digest(credentials.credentials, expected_token):
+    if not secrets.compare_digest(
+        credentials.credentials,
+        expected_token,
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid bearer token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+def get_current_user(
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(bearer_scheme),
+    ],
+    db: Annotated[Session, Depends(get_db)],
+) -> User:
+    """I authenticate a JWT and retrieve its active user."""
+
+    # I reject requests that do not provide a bearer token.
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # I validate the JWT signature, expiration, and user ID.
+    user_id = verify_access_token(credentials.credentials)
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired access token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # I retrieve the user from PostgreSQL.
+    user = db.get(User, user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account not found.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # I reject inactive users even when their JWT is still valid.
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is inactive.",
+        )
+
+    return user
