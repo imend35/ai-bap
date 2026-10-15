@@ -32,6 +32,14 @@ router = APIRouter(
     dependencies=[Depends(verify_demo_token)],
 )
 
+# User Story durumları arasında izin verdiğim geçişleri tanımlıyorum.
+ALLOWED_STATUS_TRANSITIONS = {
+    "draft": {"in_review"},
+    "in_review": {"approved", "rejected"},
+    "rejected": {"draft"},
+    "approved": set(),
+}
+
 
 @router.get("", response_model=UserStoryListResponse)
 def list_user_stories(
@@ -85,6 +93,13 @@ def create_user_story(
 ) -> UserStory:
     """Create a new user story for an existing requirement."""
 
+    # İnsan incelemesi olmadan doğrudan onaylı kayıt oluşturulmasını engelliyorum.
+    if payload.status.value != "draft":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="New User Stories must start in draft status.",
+        )
+
     requirement = db.get(Requirement, payload.requirement_id)
 
     if requirement is None:
@@ -98,7 +113,7 @@ def create_user_story(
         title=payload.title,
         description=payload.description,
         acceptance_criteria=payload.acceptance_criteria,
-        status=payload.status.value,
+        status="draft",
     )
 
     db.add(story)
@@ -119,7 +134,7 @@ def generate_user_story_draft(
 ) -> AIUserStoryGenerateResponse:
     """Generate an AI-assisted user story draft without saving it."""
 
-    # Öncelikle ilgili gereksinimin veritabanında bulunduğunu kontrol ediyorum.
+    # İlgili gereksinimin veritabanında bulunduğunu kontrol ediyorum.
     requirement = db.get(Requirement, payload.requirement_id)
 
     if requirement is None:
@@ -143,7 +158,7 @@ def generate_user_story_draft(
             detail="AI user story generation is currently unavailable.",
         ) from exc
 
-    # AI taslağını kaydetmeden kullanıcı incelemesine sunuyorum.
+    # AI taslağını kullanıcı onayı olmadan veritabanına kaydetmiyorum.
     return AIUserStoryGenerateResponse(
         requirement_id=requirement.id,
         title=generated_story.title,
@@ -184,7 +199,7 @@ def update_user_story(
     payload: UserStoryUpdate,
     db: Annotated[Session, Depends(get_db)],
 ) -> UserStory:
-    """Update only the provided fields of an existing user story."""
+    """Update an existing user story while enforcing approval rules."""
 
     story = db.get(UserStory, story_id)
 
@@ -199,6 +214,36 @@ def update_user_story(
         mode="json",
     )
 
+    current_status = story.status
+    requested_status = update_data.get("status")
+
+    # Onaylanmış User Story üzerinde doğrudan değişiklik yapılmasını engelliyorum.
+    if current_status == "approved":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Approved User Stories cannot be modified.",
+        )
+
+    # Durum değişikliği talep edildiyse geçişin geçerliliğini kontrol ediyorum.
+    if (
+        requested_status is not None
+        and requested_status != current_status
+    ):
+        allowed_statuses = ALLOWED_STATUS_TRANSITIONS.get(
+            current_status,
+            set(),
+        )
+
+        if requested_status not in allowed_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Invalid User Story status transition: "
+                    f"{current_status} -> {requested_status}."
+                ),
+            )
+
+    # Yalnızca iş kurallarına uygun alanları güncelliyorum.
     for field_name, value in update_data.items():
         setattr(story, field_name, value)
 
