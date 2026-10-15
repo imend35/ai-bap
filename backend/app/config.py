@@ -1,4 +1,6 @@
 
+"""Manage application configuration and environment settings."""
+
 from functools import lru_cache
 from pathlib import Path
 
@@ -6,19 +8,27 @@ from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
     """Manage application settings from environment variables."""
 
+    # PostgreSQL bağlantı ayarlarını yönetiyorum.
     postgres_db: str = Field(default="ai_bap")
     postgres_user: str = Field(default="ai_bap_user")
     postgres_password: SecretStr
     postgres_host: str = Field(default="127.0.0.1")
     postgres_port: int = Field(default=5433)
 
+    # API erişimi için demo kimlik doğrulamasını kullanıyorum.
     demo_access_token: SecretStr
+
+    # AI servis ayarlarını ortam değişkenlerinden okuyorum.
+    # API anahtarı bulunmadığında mevcut backend çalışmaya devam edebilir.
+    openai_api_key: SecretStr | None = None
+    openai_model: str = Field(default="gpt-4.1-mini")
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
