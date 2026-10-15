@@ -22,9 +22,6 @@ class Settings(BaseSettings):
     postgres_host: str = Field(default="127.0.0.1")
     postgres_port: int = Field(default=5433)
 
-    # I preserve demo authentication for existing API endpoints.
-    demo_access_token: SecretStr
-
     # I configure JWT authentication without exposing the signing secret.
     jwt_secret_key: SecretStr = Field(min_length=32)
     jwt_algorithm: str = Field(default="HS256", pattern="^HS256$")

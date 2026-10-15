@@ -1,51 +1,23 @@
 
-"""I manage demo and JWT authentication for protected API endpoints."""
+"""I manage JWT authentication for protected API endpoints."""
 
-import secrets
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.database import get_db
 from app.jwt_service import verify_access_token
 from app.models.user import User
 
 
+# I define the JWT bearer authentication scheme for protected endpoints.
 bearer_scheme = HTTPBearer(
-    scheme_name="DemoAccessToken",
-    description="Bearer token required to access protected demo API endpoints.",
+    scheme_name="JWTBearer",
+    description="JWT bearer token required to access protected API endpoints.",
     auto_error=False,
 )
-
-
-def verify_demo_token(
-    credentials: Annotated[
-        HTTPAuthorizationCredentials | None,
-        Depends(bearer_scheme),
-    ],
-) -> None:
-    """I verify the configured demo access token."""
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing bearer token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    expected_token = get_settings().demo_access_token.get_secret_value()
-
-    if not secrets.compare_digest(
-        credentials.credentials,
-        expected_token,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid bearer token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
 
 def get_current_user(
