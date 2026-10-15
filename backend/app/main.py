@@ -2,6 +2,7 @@
 """Initialize the AI BAP FastAPI application."""
 
 from fastapi import FastAPI
+from app.routers.sprints import router as sprints_router
 
 from app.routers.projects import router as projects_router
 from app.routers.requirements import router as requirements_router
@@ -25,3 +26,4 @@ app.include_router(projects_router)
 app.include_router(requirements_router)
 app.include_router(user_stories_router)
 app.include_router(tasks_router)
+app.include_router(sprints_router)

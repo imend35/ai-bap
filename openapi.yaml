@@ -514,6 +514,113 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
 
+  /api/v1/sprints:
+    get:
+      tags: [Sprints]
+      operationId: listSprints
+      summary: List sprints for a project
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Paginated sprint results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SprintListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+    post:
+      tags: [Sprints]
+      operationId: createSprint
+      summary: Create a sprint for a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SprintCreate"
+      responses:
+        "201":
+          description: Sprint created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sprint"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/sprints/{sprint_id}:
+    parameters:
+      - name: sprint_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [Sprints]
+      operationId: getSprint
+      summary: Get a sprint by ID
+      responses:
+        "200":
+          description: Sprint details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sprint"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+    patch:
+      tags: [Sprints]
+      operationId: updateSprint
+      summary: Update a sprint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SprintUpdate"
+      responses:
+        "200":
+          description: Updated sprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sprint"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
 components:
   securitySchemes:
     DemoAccessToken:
@@ -1099,6 +1206,119 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Task"
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          minimum: 0
+
+    SprintStatus:
+      type: string
+      description: Current lifecycle status of a sprint.
+      enum:
+        - planned
+        - active
+        - completed
+        - cancelled
+
+    SprintCreate:
+      type: object
+      additionalProperties: false
+      required:
+        - project_id
+        - name
+        - start_date
+        - end_date
+      properties:
+        project_id:
+          type: string
+          format: uuid
+          description: ID of the project that owns this sprint.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          description: Must be on or after start_date.
+        status:
+          $ref: "#/components/schemas/SprintStatus"
+
+    SprintUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          description: Must be on or after start_date.
+        status:
+          $ref: "#/components/schemas/SprintStatus"
+
+    Sprint:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - project_id
+        - name
+        - start_date
+        - end_date
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/SprintStatus"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SprintListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Sprint"
         total:
           type: integer
           minimum: 0

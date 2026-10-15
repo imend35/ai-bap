@@ -11,7 +11,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.requirement import Requirement
-
+    from app.models.sprint import Sprint
 
 class Project(Base):
     """Represent a business analysis project."""
@@ -61,6 +61,10 @@ class Project(Base):
     )
 
     requirements: Mapped[list["Requirement"]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    sprints: Mapped[list["Sprint"]] = relationship(
         back_populates="project",
         cascade="all, delete-orphan",
     )
