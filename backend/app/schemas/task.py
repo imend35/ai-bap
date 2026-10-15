@@ -23,6 +23,7 @@ class TaskCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     story_id: UUID
+    sprint_id: UUID | None = None
     title: str = Field(min_length=1, max_length=160)
     description: str = Field(default="", max_length=5000)
     status: TaskStatus = TaskStatus.TODO
@@ -46,15 +47,16 @@ class TaskUpdate(BaseModel):
         max_length=5000,
     )
     status: TaskStatus | None = None
+    sprint_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_update_fields(self) -> "TaskUpdate":
-        """Require at least one field and reject explicit null values."""
+        """Require an update and allow null only for sprint_id."""
         if not self.model_fields_set:
             raise ValueError("At least one field must be provided.")
 
         for field_name in self.model_fields_set:
-            if getattr(self, field_name) is None:
+            if field_name != "sprint_id" and getattr(self, field_name) is None:
                 raise ValueError(f"{field_name} cannot be null.")
 
         return self
@@ -67,6 +69,7 @@ class TaskResponse(BaseModel):
 
     id: UUID
     story_id: UUID
+    sprint_id: UUID | None
     title: str
     description: str
     status: TaskStatus

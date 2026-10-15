@@ -11,7 +11,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.project import Project
-
+    from app.models.task import Task
 
 class Sprint(Base):
     """Represent a sprint belonging to a project."""
@@ -74,4 +74,8 @@ class Sprint(Base):
 
     project: Mapped["Project"] = relationship(
         back_populates="sprints",
+    )
+    tasks: Mapped[list["Task"]] = relationship(
+        back_populates="sprint",
+        passive_deletes=True,
     )

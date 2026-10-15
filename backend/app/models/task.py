@@ -11,7 +11,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.user_story import UserStory
-
+    from app.models.sprint import Sprint
 
 class Task(Base):
     """Represent a development task linked to a user story."""
@@ -31,6 +31,12 @@ class Task(Base):
         index=True,
     )
 
+    sprint_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sprints.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     title: Mapped[str] = mapped_column(
         String(160),
         nullable=False,
@@ -70,5 +76,8 @@ class Task(Base):
     )
 
     user_story: Mapped["UserStory"] = relationship(
+        back_populates="tasks",
+    )
+    sprint: Mapped["Sprint | None"] = relationship(
         back_populates="tasks",
     )

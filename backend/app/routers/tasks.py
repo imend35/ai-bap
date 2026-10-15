@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Task, UserStory
+from app.models import Requirement, Sprint, Task, UserStory
 from app.schemas.task import (
     TaskCreate,
     TaskListResponse,
@@ -24,6 +24,34 @@ router = APIRouter(
     tags=["Tasks"],
     dependencies=[Depends(verify_demo_token)],
 )
+
+
+def validate_task_sprint(
+    db: Session,
+    story_id: UUID,
+    sprint_id: UUID,
+) -> None:
+    """Validate that the sprint exists and belongs to the task's project."""
+    sprint = db.get(Sprint, sprint_id)
+
+    if sprint is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sprint not found.",
+        )
+
+    project_id = db.scalar(
+        select(Requirement.project_id)
+        .join(UserStory, UserStory.requirement_id == Requirement.id)
+        .where(UserStory.id == story_id)
+    )
+
+    if project_id != sprint.project_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sprint must belong to the same project as the task.",
+        )
+
 
 @router.get("", response_model=TaskListResponse)
 def list_tasks(
@@ -64,6 +92,7 @@ def list_tasks(
         offset=offset,
     )
 
+
 @router.post(
     "",
     response_model=TaskResponse,
@@ -88,8 +117,16 @@ def create_task(
             detail="Tasks can only be created for approved user stories.",
         )
 
+    if payload.sprint_id is not None:
+        validate_task_sprint(
+            db=db,
+            story_id=payload.story_id,
+            sprint_id=payload.sprint_id,
+        )
+
     task = Task(
         story_id=payload.story_id,
+        sprint_id=payload.sprint_id,
         title=payload.title,
         description=payload.description,
         status=payload.status.value,
@@ -100,6 +137,7 @@ def create_task(
     db.refresh(task)
 
     return task
+
 
 @router.get(
     "/{task_id}",
@@ -120,6 +158,7 @@ def get_task(
 
     return task
 
+
 @router.patch(
     "/{task_id}",
     response_model=TaskResponse,
@@ -129,7 +168,7 @@ def update_task(
     payload: TaskUpdate,
     db: Annotated[Session, Depends(get_db)],
 ) -> Task:
-    """Update only the provided fields of an existing task."""
+    """Update provided task fields and validate sprint assignments."""
     task = db.get(Task, task_id)
 
     if task is None:
@@ -143,6 +182,18 @@ def update_task(
         mode="json",
     )
 
+    # Sprint atanıyorsa varlığını ve proje uyumunu doğrula.
+    if "sprint_id" in update_data:
+        sprint_id = payload.sprint_id
+
+        if sprint_id is not None:
+            validate_task_sprint(
+                db=db,
+                story_id=task.story_id,
+                sprint_id=sprint_id,
+            )
+
+    # Yalnızca istekte gönderilen alanları güncelle.
     for field_name, value in update_data.items():
         setattr(task, field_name, value)
 
