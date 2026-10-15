@@ -1,33 +1,78 @@
 
-"""Test project API authentication and pagination behavior."""
+"""I test project API operations and role-based authorization."""
 
-from uuid import UUID
+from contextlib import contextmanager
+from types import SimpleNamespace
+from uuid import UUID, uuid4
 
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.config import get_settings
 from app.database import SessionLocal
 from app.main import app
 from app.models import Project
+from app.role_permissions import ADMIN, BUSINESS_ANALYST, REVIEWER
+from app.security import get_current_user
+
 
 client = TestClient(app)
+BASE_URL = "/api/v1/projects"
+
+
+@contextmanager
+def authenticated_as(role=BUSINESS_ANALYST):
+    """I simulate an authenticated user with a specific role."""
+
+    # I override only the user lookup for authorized API tests.
+    def get_test_user():
+        """I return a controlled user for role verification."""
+        return SimpleNamespace(role=role, is_active=True)
+
+    app.dependency_overrides[get_current_user] = get_test_user
+
+    try:
+        yield client
+    finally:
+        # I restore the original authentication dependency.
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@contextmanager
+def temporary_project(name, description, project_status="planned"):
+    """I create a project and remove it after the test."""
+
+    with SessionLocal() as db:
+        project = Project(
+            name=name,
+            description=description,
+            status=project_status,
+        )
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+        project_id = project.id
+
+    try:
+        yield project_id
+    finally:
+        # I remove the temporary project from PostgreSQL.
+        with SessionLocal() as db:
+            project = db.get(Project, project_id)
+            if project is not None:
+                db.delete(project)
+                db.commit()
 
 
 def test_list_projects_with_valid_token():
-    """Verify that authorized requests return a paginated project list."""
-    token = get_settings().demo_access_token.get_secret_value()
-
-    response = client.get(
-        "/api/v1/projects",
-        headers={"Authorization": f"Bearer {token}"},
-    )
+    """I verify that an authenticated analyst can list projects."""
+    with authenticated_as() as api:
+        response = api.get(BASE_URL)
 
     assert response.status_code == status.HTTP_200_OK
 
     data = response.json()
-
     assert isinstance(data["items"], list)
     assert isinstance(data["total"], int)
     assert data["limit"] == 20
@@ -35,81 +80,74 @@ def test_list_projects_with_valid_token():
 
 
 def test_list_projects_without_token():
-    """Verify that requests without a bearer token are rejected."""
-    response = client.get("/api/v1/projects")
+    """I reject project listing without authentication."""
+    response = client.get(BASE_URL)
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     assert response.json()["detail"] == "Missing bearer token."
 
 
 def test_list_projects_with_invalid_token():
-    """Verify that requests with an invalid bearer token are rejected."""
+    """I reject an invalid JWT."""
     response = client.get(
-        "/api/v1/projects",
+        BASE_URL,
         headers={"Authorization": "Bearer invalid-demo-token"},
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert response.json()["detail"] == "Invalid bearer token."
+    assert response.json()["detail"] == "Invalid or expired access token."
 
 
 def test_list_projects_with_invalid_limit():
-    """Verify that invalid pagination limits are rejected."""
-    token = get_settings().demo_access_token.get_secret_value()
-
-    response = client.get(
-        "/api/v1/projects?limit=0",
-        headers={"Authorization": f"Bearer {token}"},
-    )
+    """I reject invalid pagination limits."""
+    with authenticated_as() as api:
+        response = api.get(f"{BASE_URL}?limit=0")
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 def test_create_project_with_valid_token():
-    """Verify that a project is created and persisted successfully."""
-    token = get_settings().demo_access_token.get_secret_value()
-
-    response = client.post(
-        "/api/v1/projects",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "name": "AI BAP Integration Test",
-            "description": "Temporary project for API testing",
-            "status": "planned",
-        },
-    )
+    """I verify that an analyst can create a persistent project."""
+    with authenticated_as() as api:
+        response = api.post(
+            BASE_URL,
+            json={
+                "name": "AI BAP Integration Test",
+                "description": "Temporary project for API testing",
+                "status": "planned",
+            },
+        )
 
     assert response.status_code == status.HTTP_201_CREATED
 
     data = response.json()
     project_id = UUID(data["id"])
 
-    assert data["name"] == "AI BAP Integration Test"
-    assert data["status"] == "planned"
-    assert data["created_at"]
-    assert data["updated_at"]
+    try:
+        assert data["name"] == "AI BAP Integration Test"
+        assert data["status"] == "planned"
+        assert data["created_at"]
+        assert data["updated_at"]
 
-    with SessionLocal() as db:
-        try:
+        with SessionLocal() as db:
             project = db.scalar(
                 select(Project).where(Project.id == project_id)
             )
-
             assert project is not None
             assert project.name == "AI BAP Integration Test"
-        finally:
-            # Remove the temporary project after verification.
+    finally:
+        # I remove the project even if an assertion fails.
+        with SessionLocal() as db:
             project = db.get(Project, project_id)
-
             if project is not None:
                 db.delete(project)
                 db.commit()
 
 
 def test_create_project_without_token():
-    """Verify that project creation requires authentication."""
+    """I require authentication before creating a project."""
     response = client.post(
-        "/api/v1/projects",
+        BASE_URL,
         json={"name": "Unauthorized Project"},
     )
 
@@ -117,9 +155,9 @@ def test_create_project_without_token():
 
 
 def test_create_project_with_invalid_token():
-    """Verify that invalid credentials cannot create projects."""
+    """I reject project creation with an invalid JWT."""
     response = client.post(
-        "/api/v1/projects",
+        BASE_URL,
         headers={"Authorization": "Bearer invalid-demo-token"},
         json={"name": "Unauthorized Project"},
     )
@@ -128,197 +166,178 @@ def test_create_project_with_invalid_token():
 
 
 def test_create_project_with_invalid_name():
-    """Verify that project creation rejects an empty name."""
-    token = get_settings().demo_access_token.get_secret_value()
-
-    response = client.post(
-        "/api/v1/projects",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"name": ""},
-    )
+    """I reject an empty project name."""
+    with authenticated_as() as api:
+        response = api.post(
+            BASE_URL,
+            json={"name": ""},
+        )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 def test_get_existing_project():
-    """Verify that an existing project can be retrieved by its UUID."""
-    token = get_settings().demo_access_token.get_secret_value()
-
-    with SessionLocal() as db:
-        project = Project(
-            name="AI BAP Detail Test",
-            description="Temporary project for detail endpoint testing",
-            status="planned",
-        )
-        db.add(project)
-        db.commit()
-        db.refresh(project)
-        project_id = project.id
-
-    try:
-        response = client.get(
-            f"/api/v1/projects/{project_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+    """I retrieve an existing project by UUID."""
+    with temporary_project(
+        "AI BAP Detail Test",
+        "Temporary project for detail endpoint testing",
+    ) as project_id:
+        with authenticated_as() as api:
+            response = api.get(f"{BASE_URL}/{project_id}")
 
         assert response.status_code == status.HTTP_200_OK
 
         data = response.json()
-
         assert data["id"] == str(project_id)
         assert data["name"] == "AI BAP Detail Test"
         assert data["status"] == "planned"
         assert data["description"] == (
             "Temporary project for detail endpoint testing"
         )
-    finally:
-        # Remove the temporary project after the test.
-        with SessionLocal() as db:
-            project = db.get(Project, project_id)
-
-            if project is not None:
-                db.delete(project)
-                db.commit()
 
 
 def test_get_nonexistent_project():
-    """Verify that a nonexistent project returns HTTP 404."""
-    from uuid import uuid4
-
-    token = get_settings().demo_access_token.get_secret_value()
-
-    response = client.get(
-        f"/api/v1/projects/{uuid4()}",
-        headers={"Authorization": f"Bearer {token}"},
-    )
+    """I return HTTP 404 for a nonexistent project."""
+    with authenticated_as() as api:
+        response = api.get(f"{BASE_URL}/{uuid4()}")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.json()["detail"] == "Project not found."
 
 
 def test_get_project_with_invalid_uuid():
-    """Verify that an invalid project UUID returns HTTP 422."""
-    token = get_settings().demo_access_token.get_secret_value()
-
-    response = client.get(
-        "/api/v1/projects/not-a-valid-uuid",
-        headers={"Authorization": f"Bearer {token}"},
-    )
+    """I reject an invalid project UUID."""
+    with authenticated_as() as api:
+        response = api.get(f"{BASE_URL}/not-a-valid-uuid")
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 def test_get_project_without_token():
-    """Verify that project details require authentication."""
-    from uuid import uuid4
-
-    response = client.get(
-        f"/api/v1/projects/{uuid4()}",
-    )
+    """I require authentication for project details."""
+    response = client.get(f"{BASE_URL}/{uuid4()}")
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 def test_update_existing_project():
-    """Verify that a partial update is persisted in PostgreSQL."""
-    token = get_settings().demo_access_token.get_secret_value()
-
-    with SessionLocal() as db:
-        project = Project(
-            name="AI BAP Update Test",
-            description="Original description",
-            status="planned",
-        )
-        db.add(project)
-        db.commit()
-        db.refresh(project)
-        project_id = project.id
-
-    try:
-        response = client.patch(
-            f"/api/v1/projects/{project_id}",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"status": "active"},
-        )
+    """I verify that an analyst can update a project."""
+    with temporary_project(
+        "AI BAP Update Test",
+        "Original description",
+    ) as project_id:
+        with authenticated_as() as api:
+            response = api.patch(
+                f"{BASE_URL}/{project_id}",
+                json={"status": "active"},
+            )
 
         assert response.status_code == status.HTTP_200_OK
 
         data = response.json()
-
         assert data["id"] == str(project_id)
         assert data["name"] == "AI BAP Update Test"
         assert data["description"] == "Original description"
         assert data["status"] == "active"
 
         with SessionLocal() as db:
-            updated_project = db.get(Project, project_id)
-
-            assert updated_project is not None
-            assert updated_project.status == "active"
-            assert updated_project.name == "AI BAP Update Test"
-    finally:
-        # Remove the temporary project after verification.
-        with SessionLocal() as db:
             project = db.get(Project, project_id)
-
-            if project is not None:
-                db.delete(project)
-                db.commit()
+            assert project is not None
+            assert project.status == "active"
+            assert project.name == "AI BAP Update Test"
 
 
 def test_update_nonexistent_project():
-    """Verify that updating a nonexistent project returns HTTP 404."""
-    from uuid import uuid4
-
-    token = get_settings().demo_access_token.get_secret_value()
-
-    response = client.patch(
-        f"/api/v1/projects/{uuid4()}",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"status": "active"},
-    )
+    """I return HTTP 404 when updating a nonexistent project."""
+    with authenticated_as() as api:
+        response = api.patch(
+            f"{BASE_URL}/{uuid4()}",
+            json={"status": "active"},
+        )
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.json()["detail"] == "Project not found."
 
 
 def test_update_project_with_empty_payload():
-    """Verify that an empty update payload is rejected."""
-    from uuid import uuid4
-
-    token = get_settings().demo_access_token.get_secret_value()
-
-    response = client.patch(
-        f"/api/v1/projects/{uuid4()}",
-        headers={"Authorization": f"Bearer {token}"},
-        json={},
-    )
+    """I reject an empty project update."""
+    with authenticated_as() as api:
+        response = api.patch(
+            f"{BASE_URL}/{uuid4()}",
+            json={},
+        )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 def test_update_project_with_invalid_status():
-    """Verify that unsupported project statuses are rejected."""
-    from uuid import uuid4
-
-    token = get_settings().demo_access_token.get_secret_value()
-
-    response = client.patch(
-        f"/api/v1/projects/{uuid4()}",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"status": "invalid_status"},
-    )
+    """I reject unsupported project statuses."""
+    with authenticated_as() as api:
+        response = api.patch(
+            f"{BASE_URL}/{uuid4()}",
+            json={"status": "invalid_status"},
+        )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 def test_update_project_without_token():
-    """Verify that project updates require authentication."""
-    from uuid import uuid4
-
+    """I require authentication for project updates."""
     response = client.patch(
-        f"/api/v1/projects/{uuid4()}",
+        f"{BASE_URL}/{uuid4()}",
         json={"status": "active"},
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.parametrize("role", [ADMIN, BUSINESS_ANALYST, REVIEWER])
+def test_all_roles_can_list_projects(role):
+    """I allow every supported role to list projects."""
+    with authenticated_as(role) as api:
+        response = api.get(BASE_URL)
+
+    assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.parametrize("role", [ADMIN, BUSINESS_ANALYST])
+def test_admin_and_analyst_can_create_projects(role):
+    """I allow admins and analysts to create projects."""
+    with authenticated_as(role) as api:
+        response = api.post(
+            BASE_URL,
+            json={"name": f"Role Test {uuid4().hex[:8]}"},
+        )
+
+    assert response.status_code == status.HTTP_201_CREATED
+
+    # I remove the project created for role verification.
+    project_id = UUID(response.json()["id"])
+
+    with SessionLocal() as db:
+        project = db.get(Project, project_id)
+        if project is not None:
+            db.delete(project)
+            db.commit()
+
+
+def test_reviewer_cannot_create_project():
+    """I prevent reviewers from creating projects."""
+    with authenticated_as(REVIEWER) as api:
+        response = api.post(
+            BASE_URL,
+            json={"name": "Reviewer Restricted Project"},
+        )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_reviewer_cannot_update_project():
+    """I prevent reviewers from updating projects."""
+    with authenticated_as(REVIEWER) as api:
+        response = api.patch(
+            f"{BASE_URL}/{uuid4()}",
+            json={"status": "active"},
+        )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
