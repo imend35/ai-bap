@@ -1,17 +1,21 @@
 
-"""I provide API endpoints for user story management."""
+"""I provide JWT-protected API endpoints for user story management."""
 
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Requirement, UserStory
-from app.role_permissions import ADMIN, REVIEWER
+from app.role_permissions import (
+    ADMIN,
+    BUSINESS_ANALYST,
+    REVIEWER,
+    require_roles,
+)
 from app.schemas.ai_user_story import (
     AIUserStoryGenerateRequest,
     AIUserStoryGenerateResponse,
@@ -22,23 +26,19 @@ from app.schemas.user_story import (
     UserStoryResponse,
     UserStoryUpdate,
 )
-from app.security import (
-    bearer_scheme,
-    get_current_user,
-    verify_demo_token,
-)
 from app.services.ai.user_story_generator import (
     AIGenerationError,
     generate_user_story,
 )
 
+
 router = APIRouter(
     prefix="/api/v1/user-stories",
     tags=["User Stories"],
-    dependencies=[Depends(verify_demo_token)],
 )
 
-# I define the permitted User Story status transitions.
+
+# I define valid status transitions for the user story workflow.
 ALLOWED_STATUS_TRANSITIONS = {
     "draft": {"in_review"},
     "in_review": {"approved", "rejected"},
@@ -47,7 +47,13 @@ ALLOWED_STATUS_TRANSITIONS = {
 }
 
 
-@router.get("", response_model=UserStoryListResponse)
+@router.get(
+    "",
+    response_model=UserStoryListResponse,
+    dependencies=[
+        Depends(require_roles(ADMIN, BUSINESS_ANALYST, REVIEWER))
+    ],
+)
 def list_user_stories(
     requirement_id: UUID,
     db: Annotated[Session, Depends(get_db)],
@@ -56,6 +62,7 @@ def list_user_stories(
 ) -> UserStoryListResponse:
     """I return a paginated list of user stories for a requirement."""
 
+    # I verify that the selected requirement exists.
     requirement = db.get(Requirement, requirement_id)
 
     if requirement is None:
@@ -64,12 +71,14 @@ def list_user_stories(
             detail="Requirement not found.",
         )
 
+    # I count the user stories associated with the requirement.
     total = db.scalar(
         select(func.count())
         .select_from(UserStory)
         .where(UserStory.requirement_id == requirement_id)
     ) or 0
 
+    # I retrieve user stories using stable ordering and pagination.
     statement = (
         select(UserStory)
         .where(UserStory.requirement_id == requirement_id)
@@ -92,6 +101,9 @@ def list_user_stories(
     "",
     response_model=UserStoryResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(require_roles(ADMIN, BUSINESS_ANALYST))
+    ],
 )
 def create_user_story(
     payload: UserStoryCreate,
@@ -99,13 +111,14 @@ def create_user_story(
 ) -> UserStory:
     """I create a new user story for an existing requirement."""
 
-    # I prevent new stories from bypassing human review.
+    # I require all new user stories to start in draft status.
     if payload.status.value != "draft":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="New User Stories must start in draft status.",
         )
 
+    # I verify that the related requirement exists.
     requirement = db.get(Requirement, payload.requirement_id)
 
     if requirement is None:
@@ -114,6 +127,7 @@ def create_user_story(
             detail="Requirement not found.",
         )
 
+    # I create the user story without bypassing human review.
     story = UserStory(
         requirement_id=payload.requirement_id,
         title=payload.title,
@@ -122,6 +136,7 @@ def create_user_story(
         status="draft",
     )
 
+    # I persist the new draft and reload its generated fields.
     db.add(story)
     db.commit()
     db.refresh(story)
@@ -133,6 +148,9 @@ def create_user_story(
     "/generate",
     response_model=AIUserStoryGenerateResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[
+        Depends(require_roles(ADMIN, BUSINESS_ANALYST))
+    ],
 )
 def generate_user_story_draft(
     payload: AIUserStoryGenerateRequest,
@@ -158,7 +176,7 @@ def generate_user_story_draft(
         )
 
     except AIGenerationError as exc:
-        # I convert AI service failures into a controlled API response.
+        # I return a controlled error if the AI service is unavailable.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI user story generation is currently unavailable.",
@@ -178,13 +196,17 @@ def generate_user_story_draft(
 @router.get(
     "/{story_id}",
     response_model=UserStoryResponse,
+    dependencies=[
+        Depends(require_roles(ADMIN, BUSINESS_ANALYST, REVIEWER))
+    ],
 )
 def get_user_story(
     story_id: UUID,
     db: Annotated[Session, Depends(get_db)],
 ) -> UserStory:
-    """I return a single user story by its unique identifier."""
+    """I return a user story by its unique identifier."""
 
+    # I retrieve the requested user story.
     story = db.get(UserStory, story_id)
 
     if story is None:
@@ -199,18 +221,18 @@ def get_user_story(
 @router.patch(
     "/{story_id}",
     response_model=UserStoryResponse,
+    dependencies=[
+        Depends(require_roles(ADMIN, BUSINESS_ANALYST))
+    ],
 )
 def update_user_story(
     story_id: UUID,
     payload: UserStoryUpdate,
     db: Annotated[Session, Depends(get_db)],
-    credentials: Annotated[
-        HTTPAuthorizationCredentials | None,
-        Depends(bearer_scheme),
-    ],
 ) -> UserStory:
-    """I update a user story while enforcing approval permissions."""
+    """I update user stories while protecting approval decisions."""
 
+    # I verify that the requested user story exists.
     story = db.get(UserStory, story_id)
 
     if story is None:
@@ -219,6 +241,7 @@ def update_user_story(
             detail="User Story not found.",
         )
 
+    # I extract only the fields explicitly provided in the request.
     update_data = payload.model_dump(
         exclude_unset=True,
         mode="json",
@@ -227,14 +250,14 @@ def update_user_story(
     current_status = story.status
     requested_status = update_data.get("status")
 
-    # I prevent modifications to approved user stories.
+    # I prevent any modification to an approved user story.
     if current_status == "approved":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Approved User Stories cannot be modified.",
         )
 
-    # I validate status transitions before applying changes.
+    # I validate status transitions before applying updates.
     if (
         requested_status is not None
         and requested_status != current_status
@@ -253,21 +276,21 @@ def update_user_story(
                 ),
             )
 
-    # I reserve approval and rejection decisions for authorized users.
+    # I reserve approval and rejection for audited approval endpoints.
     if requested_status in {"approved", "rejected"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                "Approval and rejection require role-based "
-                "JWT authentication, which is not yet enabled "
-                "for this demo-token endpoint."
+                "Approval and rejection must use the "
+                "dedicated User Story approval endpoints."
             ),
         )
 
-    # I update only fields permitted by the workflow.
+    # I apply only the requested and validated changes.
     for field_name, value in update_data.items():
         setattr(story, field_name, value)
 
+    # I persist the changes and refresh the user story.
     db.commit()
     db.refresh(story)
 

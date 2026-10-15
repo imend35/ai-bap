@@ -7,20 +7,19 @@ from uuid import uuid4
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from app.config import get_settings
 from app.database import SessionLocal
+from app.jwt_service import create_access_token
 from app.main import app
 from app.models import Project, Requirement, UserStory
 from app.models.user import User
-from app.jwt_service import create_access_token
 
 
 client = TestClient(app)
 
 
-def get_auth_headers() -> dict[str, str]:
-    """I prepare demo-token headers for legacy editing endpoints."""
-    token = get_settings().demo_access_token.get_secret_value()
+def get_jwt_headers(user_id) -> dict[str, str]:
+    """I sign a real JWT for my authorized test user."""
+    token = create_access_token(user_id)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -105,10 +104,30 @@ def prepare_story(
             db.commit()
 
 
-def get_jwt_headers(user_id) -> dict[str, str]:
-    """I sign a real JWT for my authorized test user."""
-    token = create_access_token(user_id)
-    return {"Authorization": f"Bearer {token}"}
+@contextmanager
+def prepare_editor():
+    """I create a temporary business analyst for editing operations."""
+
+    with SessionLocal() as db:
+        editor = User(
+            email=f"approval-editor-{uuid4().hex}@example.com",
+            full_name="Approval Test Business Analyst",
+            password_hash="test-only-not-for-login",
+            role="business_analyst",
+            is_active=True,
+        )
+        db.add(editor)
+        db.commit()
+        editor_id = editor.id
+
+    try:
+        yield editor_id
+    finally:
+        with SessionLocal() as db:
+            editor = db.get(User, editor_id)
+            if editor is not None:
+                db.delete(editor)
+                db.commit()
 
 
 def test_draft_user_story_cannot_be_approved_directly():
@@ -138,11 +157,11 @@ def test_user_story_can_be_approved_after_review():
     with prepare_story(role="admin") as (
         _project_id, _requirement_id, story_id, user_id
     ):
-        # I submit my draft story for review.
+        # I submit my draft story for review with my administrator JWT.
         review_response = client.patch(
             f"/api/v1/user-stories/{story_id}",
             json={"status": "in_review"},
-            headers=get_auth_headers(),
+            headers=get_jwt_headers(user_id),
         )
 
         assert review_response.status_code == status.HTTP_200_OK
@@ -170,43 +189,46 @@ def test_user_story_can_be_rejected_after_review():
     with prepare_story(role="reviewer") as (
         _project_id, _requirement_id, story_id, user_id
     ):
-        # I submit the draft story for human review.
-        review_response = client.patch(
-            f"/api/v1/user-stories/{story_id}",
-            json={"status": "in_review"},
-            headers=get_auth_headers(),
-        )
+        with prepare_editor() as editor_id:
+            # I use a business analyst to submit the story for review.
+            review_response = client.patch(
+                f"/api/v1/user-stories/{story_id}",
+                json={"status": "in_review"},
+                headers=get_jwt_headers(editor_id),
+            )
 
-        assert review_response.status_code == status.HTTP_200_OK
-        assert review_response.json()["status"] == "in_review"
+            assert review_response.status_code == status.HTTP_200_OK
+            assert review_response.json()["status"] == "in_review"
 
-        # I reject the reviewed story using my reviewer JWT.
-        rejection_response = client.post(
-            f"/api/v1/user-stories/{story_id}/reject",
-            headers=get_jwt_headers(user_id),
-        )
+            # I reject the reviewed story using my reviewer JWT.
+            rejection_response = client.post(
+                f"/api/v1/user-stories/{story_id}/reject",
+                headers=get_jwt_headers(user_id),
+            )
 
-        assert rejection_response.status_code == status.HTTP_200_OK
-        assert rejection_response.json()["status"] == "rejected"
+            assert rejection_response.status_code == status.HTTP_200_OK
+            assert rejection_response.json()["status"] == "rejected"
 
-        # I verify that PostgreSQL persisted my rejection.
-        with SessionLocal() as db:
-            saved_story = db.get(UserStory, story_id)
-            assert saved_story is not None
-            assert saved_story.status == "rejected"
+            # I verify that PostgreSQL persisted my rejection.
+            with SessionLocal() as db:
+                saved_story = db.get(UserStory, story_id)
+                assert saved_story is not None
+                assert saved_story.status == "rejected"
 
 
 def test_rejected_user_story_can_be_revised_and_resubmitted():
     """I verify that I can revise and resubmit a rejected story."""
 
-    with prepare_story(initial_status="rejected") as (
-        _project_id, _requirement_id, story_id, _user_id
+    with prepare_story(initial_status="rejected", role="business_analyst") as (
+        _project_id, _requirement_id, story_id, user_id
     ):
+        headers = get_jwt_headers(user_id)
+
         # I return my rejected story to draft status.
         draft_response = client.patch(
             f"/api/v1/user-stories/{story_id}",
             json={"status": "draft"},
-            headers=get_auth_headers(),
+            headers=headers,
         )
 
         assert draft_response.status_code == status.HTTP_200_OK
@@ -228,7 +250,7 @@ def test_rejected_user_story_can_be_revised_and_resubmitted():
                 "description": revised_description,
                 "acceptance_criteria": revised_criteria,
             },
-            headers=get_auth_headers(),
+            headers=headers,
         )
 
         assert revision_response.status_code == status.HTTP_200_OK
@@ -239,7 +261,7 @@ def test_rejected_user_story_can_be_revised_and_resubmitted():
         review_response = client.patch(
             f"/api/v1/user-stories/{story_id}",
             json={"status": "in_review"},
-            headers=get_auth_headers(),
+            headers=headers,
         )
 
         assert review_response.status_code == status.HTTP_200_OK
@@ -257,9 +279,11 @@ def test_rejected_user_story_can_be_revised_and_resubmitted():
 def test_approved_user_story_cannot_be_modified():
     """I verify that approved stories remain protected from changes."""
 
-    with prepare_story(initial_status="approved") as (
-        _project_id, _requirement_id, story_id, _user_id
+    with prepare_story(initial_status="approved", role="admin") as (
+        _project_id, _requirement_id, story_id, user_id
     ):
+        headers = get_jwt_headers(user_id)
+
         # I read the original approved story before attempting changes.
         with SessionLocal() as db:
             story = db.get(UserStory, story_id)
@@ -278,7 +302,7 @@ def test_approved_user_story_cannot_be_modified():
                     "This criterion should not be saved."
                 ],
             },
-            headers=get_auth_headers(),
+            headers=headers,
         )
 
         assert content_response.status_code == status.HTTP_409_CONFLICT
@@ -287,7 +311,7 @@ def test_approved_user_story_cannot_be_modified():
         status_response = client.patch(
             f"/api/v1/user-stories/{story_id}",
             json={"status": "draft"},
-            headers=get_auth_headers(),
+            headers=headers,
         )
 
         assert status_response.status_code == status.HTTP_409_CONFLICT
@@ -305,8 +329,8 @@ def test_approved_user_story_cannot_be_modified():
 def test_user_story_cannot_be_created_as_approved():
     """I verify that story creation cannot bypass human approval."""
 
-    with prepare_story() as (
-        _project_id, requirement_id, _story_id, _user_id
+    with prepare_story(role="business_analyst") as (
+        _project_id, requirement_id, _story_id, user_id
     ):
         # I count existing stories before attempting invalid creation.
         with SessionLocal() as db:
@@ -331,7 +355,7 @@ def test_user_story_cannot_be_created_as_approved():
                 ],
                 "status": "approved",
             },
-            headers=get_auth_headers(),
+            headers=get_jwt_headers(user_id),
         )
 
         assert response.status_code == status.HTTP_409_CONFLICT

@@ -1,21 +1,20 @@
 
 """I verify audit identity snapshots for approval decisions."""
 
+from uuid import uuid4
+
 from sqlalchemy import select
 
 from app.database import SessionLocal
 from app.models import UserStoryApprovalAudit
+from app.models.user import User
 
 from tests.test_user_story_approval_api import (
     client,
-    get_auth_headers,
     get_jwt_headers,
+    prepare_editor,
     prepare_story,
 )
-
-from uuid import uuid4
-
-from app.models.user import User
 
 
 def test_approval_persists_audit_identity_snapshots():
@@ -27,22 +26,22 @@ def test_approval_persists_audit_identity_snapshots():
         story_id,
         user_id,
     ):
-        # I submit the story for human review.
+        # I submit the story for review with an administrator JWT.
         review_response = client.patch(
             f"/api/v1/user-stories/{story_id}",
             json={"status": "in_review"},
-            headers=get_auth_headers(),
+            headers=get_jwt_headers(user_id),
         )
         assert review_response.status_code == 200
 
-        # I approve the reviewed story with an authenticated administrator.
+        # I approve the reviewed story with the same administrator.
         approval_response = client.post(
             f"/api/v1/user-stories/{story_id}/approve",
             headers=get_jwt_headers(user_id),
         )
         assert approval_response.status_code == 200
 
-        # I retrieve the audit record before temporary records are deleted.
+        # I verify the audit record preserves the original identities.
         with SessionLocal() as db:
             audit = db.scalar(
                 select(UserStoryApprovalAudit)
@@ -62,6 +61,7 @@ def test_approval_persists_audit_identity_snapshots():
             assert audit.previous_status == "in_review"
             assert audit.new_status == "approved"
 
+
 def test_rejection_persists_audit_identity_snapshots():
     """I verify that rejection persists both original identifiers."""
 
@@ -71,40 +71,42 @@ def test_rejection_persists_audit_identity_snapshots():
         story_id,
         user_id,
     ):
-        # I submit the story for human review.
-        review_response = client.patch(
-            f"/api/v1/user-stories/{story_id}",
-            json={"status": "in_review"},
-            headers=get_auth_headers(),
-        )
-        assert review_response.status_code == 200
-
-        # I reject the reviewed story with an authenticated reviewer.
-        rejection_response = client.post(
-            f"/api/v1/user-stories/{story_id}/reject",
-            headers=get_jwt_headers(user_id),
-        )
-        assert rejection_response.status_code == 200
-
-        # I verify the persisted audit record before cleanup.
-        with SessionLocal() as db:
-            audit = db.scalar(
-                select(UserStoryApprovalAudit)
-                .where(
-                    UserStoryApprovalAudit.user_story_id_snapshot == story_id
-                )
-                .where(
-                    UserStoryApprovalAudit.actor_id_snapshot == user_id
-                )
-                .where(UserStoryApprovalAudit.action == "rejected")
-                .order_by(UserStoryApprovalAudit.created_at.desc())
+        with prepare_editor() as editor_id:
+            # I use a business analyst to submit the story for review.
+            review_response = client.patch(
+                f"/api/v1/user-stories/{story_id}",
+                json={"status": "in_review"},
+                headers=get_jwt_headers(editor_id),
             )
+            assert review_response.status_code == 200
 
-            assert audit is not None
-            assert audit.user_story_id_snapshot == story_id
-            assert audit.actor_id_snapshot == user_id
-            assert audit.previous_status == "in_review"
-            assert audit.new_status == "rejected"
+            # I reject the story using the reviewer's own JWT.
+            rejection_response = client.post(
+                f"/api/v1/user-stories/{story_id}/reject",
+                headers=get_jwt_headers(user_id),
+            )
+            assert rejection_response.status_code == 200
+
+            # I verify the reviewer identity was saved in the audit.
+            with SessionLocal() as db:
+                audit = db.scalar(
+                    select(UserStoryApprovalAudit)
+                    .where(
+                        UserStoryApprovalAudit.user_story_id_snapshot == story_id
+                    )
+                    .where(
+                        UserStoryApprovalAudit.actor_id_snapshot == user_id
+                    )
+                    .where(UserStoryApprovalAudit.action == "rejected")
+                    .order_by(UserStoryApprovalAudit.created_at.desc())
+                )
+
+                assert audit is not None
+                assert audit.user_story_id_snapshot == story_id
+                assert audit.actor_id_snapshot == user_id
+                assert audit.previous_status == "in_review"
+                assert audit.new_status == "rejected"
+
 
 def test_audit_snapshots_survive_user_and_story_deletion():
     """I verify that audit identity snapshots survive record deletion."""
@@ -115,11 +117,11 @@ def test_audit_snapshots_survive_user_and_story_deletion():
         story_id,
         user_id,
     ):
-        # I submit the story for review.
+        # I submit the story for review using a real JWT.
         review_response = client.patch(
             f"/api/v1/user-stories/{story_id}",
             json={"status": "in_review"},
-            headers=get_auth_headers(),
+            headers=get_jwt_headers(user_id),
         )
         assert review_response.status_code == 200
 
@@ -130,7 +132,7 @@ def test_audit_snapshots_survive_user_and_story_deletion():
         )
         assert approval_response.status_code == 200
 
-        # I verify the snapshot identifiers before cleanup.
+        # I record the audit ID before temporary records are deleted.
         with SessionLocal() as db:
             audit = db.scalar(
                 select(UserStoryApprovalAudit)
@@ -147,9 +149,7 @@ def test_audit_snapshots_survive_user_and_story_deletion():
             assert audit is not None
             audit_id = audit.id
 
-        # I remove the temporary records using the existing fixture cleanup.
-        # I verify that the audit snapshots remain after the context exits.
-
+    # I verify that identity snapshots survive cleanup of related records.
     with SessionLocal() as db:
         saved_audit = db.get(UserStoryApprovalAudit, audit_id)
 
@@ -158,6 +158,7 @@ def test_audit_snapshots_survive_user_and_story_deletion():
         assert saved_audit.actor_id is None
         assert saved_audit.user_story_id_snapshot == story_id
         assert saved_audit.actor_id_snapshot == user_id
+
 
 def test_admin_can_access_audit_history():
     """I verify that an administrator can read audit history."""
@@ -194,6 +195,7 @@ def test_business_analyst_cannot_access_audit_history():
 
         assert response.status_code == 403
 
+
 def test_reviewer_can_access_audit_history():
     """I verify that reviewers can read audit history."""
 
@@ -227,10 +229,11 @@ def test_audit_history_rejects_missing_jwt():
 
         assert response.status_code == 401
 
+
 def test_audit_history_survives_story_and_actor_deletion():
     """I verify that audit history remains accessible after deletion."""
 
-    # I create a separate administrator who will read the audit history.
+    # I create a separate administrator to read the audit history.
     with SessionLocal() as db:
         audit_reader = User(
             email=f"audit-reader-{uuid4().hex}@example.com",
@@ -244,27 +247,29 @@ def test_audit_history_survives_story_and_actor_deletion():
         reader_id = audit_reader.id
 
     try:
-        # I create a temporary story and approve it as a reviewer.
         with prepare_story(role="reviewer") as (
             _project_id,
             _requirement_id,
             story_id,
             actor_id,
         ):
-            review_response = client.patch(
-                f"/api/v1/user-stories/{story_id}",
-                json={"status": "in_review"},
-                headers=get_auth_headers(),
-            )
-            assert review_response.status_code == 200
+            with prepare_editor() as editor_id:
+                # I submit the story using a business analyst JWT.
+                review_response = client.patch(
+                    f"/api/v1/user-stories/{story_id}",
+                    json={"status": "in_review"},
+                    headers=get_jwt_headers(editor_id),
+                )
+                assert review_response.status_code == 200
 
-            approval_response = client.post(
-                f"/api/v1/user-stories/{story_id}/approve",
-                headers=get_jwt_headers(actor_id),
-            )
-            assert approval_response.status_code == 200
+                # I approve the story using the reviewer's JWT.
+                approval_response = client.post(
+                    f"/api/v1/user-stories/{story_id}/approve",
+                    headers=get_jwt_headers(actor_id),
+                )
+                assert approval_response.status_code == 200
 
-        # I read the audit history after the story and original actor are deleted.
+        # I read the audit history after the story and actor are deleted.
         response = client.get(
             f"/api/v1/user-stories/{story_id}/audit",
             headers=get_jwt_headers(reader_id),
