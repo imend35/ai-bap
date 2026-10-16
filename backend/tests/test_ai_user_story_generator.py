@@ -301,3 +301,75 @@ def test_invalid_ai_schema(
         match="AI user story generation failed",
     ):
         run_generation()
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        SimpleNamespace(choices=[]),
+        SimpleNamespace(choices=None),
+        SimpleNamespace(choices="invalid"),
+        SimpleNamespace(choices=[SimpleNamespace(message=None)]),
+        SimpleNamespace(choices=[SimpleNamespace()]),
+        SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content={"title": "Invalid"})
+                )
+            ]
+        ),
+    ],
+)
+def test_invalid_ai_response_structure(
+    mocked_openai: MagicMock,
+    response: SimpleNamespace,
+) -> None:
+    """I verify that malformed OpenAI response structures are rejected."""
+
+    # I simulate unexpected response structures without API calls.
+    mocked_openai.chat.completions.create.return_value = response
+
+    # I expect a controlled error instead of an unhandled exception.
+    with pytest.raises(
+        AIGenerationError,
+        match="AI returned an invalid response structure",
+    ):
+        run_generation()
+
+
+def test_missing_ai_choices_attribute(
+    mocked_openai: MagicMock,
+) -> None:
+    """I verify that a missing choices attribute is rejected."""
+
+    # I simulate a response without the expected choices attribute.
+    mocked_openai.chat.completions.create.return_value = SimpleNamespace()
+
+    with pytest.raises(
+        AIGenerationError,
+        match="AI returned an invalid response structure",
+    ):
+        run_generation()
+
+
+def test_openai_client_initialization_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    mocked_openai: MagicMock,
+) -> None:
+    """I verify that client initialization errors are handled."""
+
+    # I simulate a configuration error during client initialization.
+    def raise_initialization_error(**kwargs: object) -> None:
+        """I simulate an OpenAI client initialization failure."""
+        raise ValueError("Invalid client configuration")
+
+    monkeypatch.setattr(
+        user_story_generator,
+        "OpenAI",
+        raise_initialization_error,
+    )
+
+    with pytest.raises(
+        AIGenerationError,
+        match="AI user story generation failed",
+    ):
+        run_generation()

@@ -1,5 +1,5 @@
 
-"""Generate validated user story drafts using the OpenAI API."""
+"""I generate validated user story drafts using the OpenAI API."""
 
 import json
 
@@ -20,7 +20,7 @@ from app.services.ai.user_story_prompt import (
 
 
 class GeneratedUserStory(BaseModel):
-    """Represent a validated AI-generated user story draft."""
+    """I represent a validated AI-generated user story draft."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -37,16 +37,16 @@ class GeneratedUserStory(BaseModel):
         cls,
         criteria: list[str],
     ) -> list[str]:
-        """Validate each AI-generated acceptance criterion."""
+        """I validate each AI-generated acceptance criterion."""
 
-        # Her kabul kriterinin anlamlı bir metin içerdiğini kontrol ediyorum.
+        # I verify that every acceptance criterion contains meaningful text.
         for criterion in criteria:
             if not criterion.strip():
                 raise ValueError(
                     "Acceptance criteria cannot be blank."
                 )
 
-            # Mevcut User Story şemamızla uzunluk uyumunu koruyorum.
+            # I enforce the length limit defined by the user story schema.
             if len(criterion) > 1000:
                 raise ValueError(
                     "Each acceptance criterion must be at most 1000 characters."
@@ -56,7 +56,42 @@ class GeneratedUserStory(BaseModel):
 
 
 class AIGenerationError(Exception):
-    """Represent a controlled AI generation failure."""
+    """I represent a controlled AI generation failure."""
+
+
+def extract_response_content(response: object) -> str:
+    """I safely extract JSON text from an OpenAI response."""
+
+    # I verify that the response contains a non-empty choices list.
+    choices = getattr(response, "choices", None)
+
+    if not isinstance(choices, list) or not choices:
+        raise AIGenerationError(
+            "AI returned an invalid response structure."
+        )
+
+    # I verify that the first choice contains a message.
+    message = getattr(choices[0], "message", None)
+
+    if message is None:
+        raise AIGenerationError(
+            "AI returned an invalid response structure."
+        )
+
+    # I verify that the message contains text rather than another data type.
+    content = getattr(message, "content", None)
+
+    if content is None or content == "":
+        raise AIGenerationError(
+            "AI returned an empty response."
+        )
+
+    if not isinstance(content, str):
+        raise AIGenerationError(
+            "AI returned an invalid response structure."
+        )
+
+    return content
 
 
 def generate_user_story(
@@ -64,9 +99,9 @@ def generate_user_story(
     requirement_description: str,
     requirement_priority: str,
 ) -> GeneratedUserStory:
-    """Generate a user story draft from requirement information."""
+    """I generate a user story draft from requirement information."""
 
-    # AI yapılandırmasını uygulama ayarlarından okuyorum.
+    # I read the AI configuration from application settings.
     settings = get_settings()
 
     if (
@@ -77,22 +112,22 @@ def generate_user_story(
             "OpenAI API key is not configured."
         )
 
-    # Gereksinim bilgilerinden kullanıcı prompt'unu oluşturuyorum.
+    # I construct the user prompt from untrusted requirement data.
     user_prompt = build_user_story_prompt(
         requirement_title=requirement_title,
         requirement_description=requirement_description,
         requirement_priority=requirement_priority,
     )
 
-    # API anahtarını kaynak kodda tutmadan OpenAI istemcisini oluşturuyorum.
-    client = OpenAI(
-        api_key=settings.openai_api_key.get_secret_value(),
-        timeout=30.0,
-        max_retries=1,
-    )
-
     try:
-        # Modelden yalnızca JSON biçiminde bir User Story taslağı istiyorum.
+        # I initialize the OpenAI client without exposing credentials.
+        client = OpenAI(
+            api_key=settings.openai_api_key.get_secret_value(),
+            timeout=30.0,
+            max_retries=1,
+        )
+
+        # I request a JSON-formatted user story draft.
         response = client.chat.completions.create(
             model=settings.openai_model,
             messages=[
@@ -109,14 +144,10 @@ def generate_user_story(
             temperature=0.2,
         )
 
-        content = response.choices[0].message.content
+        # I validate the response structure before parsing its content.
+        content = extract_response_content(response)
 
-        if not content:
-            raise AIGenerationError(
-                "AI returned an empty response."
-            )
-
-        # AI yanıtını JSON olarak ayrıştırıp Pydantic ile doğruluyorum.
+        # I parse JSON and validate the generated story schema.
         generated_data = json.loads(content)
 
         return GeneratedUserStory.model_validate(generated_data)
@@ -125,7 +156,7 @@ def generate_user_story(
         APIError,
         json.JSONDecodeError,
         ValidationError,
-        IndexError,
+        ValueError,
     ) as exc:
         raise AIGenerationError(
             "AI user story generation failed."
