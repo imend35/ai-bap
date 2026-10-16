@@ -25,6 +25,7 @@ class UserResponse(BaseModel):
     """I return public user information without exposing password hashes."""
 
     id: UUID
+    record_number: str = Field(pattern=r"^USR-[0-9]{3,}$")
     email: EmailStr
     full_name: str
     role: str

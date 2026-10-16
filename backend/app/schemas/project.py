@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.record_creator import RecordCreator
+
 
 class ProjectStatus(str, Enum):
     """Define the supported project lifecycle statuses."""
@@ -57,6 +59,8 @@ class ProjectResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    record_number: str = Field(pattern=r"^PRJ-[0-9]{3,}$")
+    created_by: RecordCreator | None
     name: str
     description: str | None = None
     status: ProjectStatus

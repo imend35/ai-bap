@@ -1,7 +1,6 @@
 
 """I test requirement management with JWT authentication and RBAC."""
 
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -11,9 +10,9 @@ from fastapi.testclient import TestClient
 from app.database import SessionLocal
 from app.main import app
 from app.models import Project, Requirement
+from app.models.user import User
 from app.role_permissions import ADMIN, BUSINESS_ANALYST, REVIEWER
 from app.security import get_current_user
-
 
 client = TestClient(app)
 BASE_URL = "/api/v1/requirements"
@@ -23,11 +22,18 @@ BASE_URL = "/api/v1/requirements"
 def authenticated_user():
     """I provide a configurable authenticated user for API tests."""
 
-    user = SimpleNamespace(
-        id=uuid4(),
-        role=BUSINESS_ANALYST,
-        is_active=True,
-    )
+    with SessionLocal() as db:
+        user = User(
+            email=f"requirement-api-{uuid4().hex}@example.com",
+            full_name="Requirement API Test User",
+            password_hash="test-only-not-for-login",
+            role=BUSINESS_ANALYST,
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        user_id = user.id
 
     # I override authentication without exposing real credentials.
     app.dependency_overrides[get_current_user] = lambda: user
@@ -36,6 +42,12 @@ def authenticated_user():
 
     # I restore the original authentication dependency after each test.
     app.dependency_overrides.pop(get_current_user, None)
+
+    with SessionLocal() as db:
+        persisted_user = db.get(User, user_id)
+        if persisted_user is not None:
+            db.delete(persisted_user)
+            db.commit()
 
 
 @pytest.fixture

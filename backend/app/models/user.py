@@ -2,9 +2,9 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, String, func
+from sqlalchemy import Boolean, DateTime, Enum, FetchedValue, String, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
@@ -18,6 +18,13 @@ class User(Base):
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
+    )
+
+    record_number: Mapped[str] = mapped_column(
+        String(32),
+        unique=True,
+        nullable=False,
+        server_default=FetchedValue(),
     )
 
     email: Mapped[str] = mapped_column(
@@ -67,4 +74,17 @@ class User(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    created_projects: Mapped[list["Project"]] = relationship(
+        back_populates="created_by",
+        passive_deletes=True,
+    )
+    created_requirements: Mapped[list["Requirement"]] = relationship(
+        back_populates="created_by",
+        passive_deletes=True,
+    )
+    created_user_stories: Mapped[list["UserStory"]] = relationship(
+        back_populates="created_by",
+        passive_deletes=True,
     )

@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.record_creator import RecordCreator
+
 
 class RequirementPriority(str, Enum):
     """Define the supported requirement priority levels."""
@@ -79,6 +81,8 @@ class RequirementResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    record_number: str = Field(pattern=r"^REQ-[0-9]{3,}$")
+    created_by: RecordCreator | None
     project_id: UUID
     title: str
     description: str

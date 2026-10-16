@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models import Project
@@ -48,6 +48,7 @@ def list_projects(
     # I retrieve the requested project page.
     statement = (
         select(Project)
+        .options(selectinload(Project.created_by))
         .order_by(Project.created_at.desc(), Project.id.desc())
         .limit(limit)
         .offset(offset)
@@ -80,6 +81,7 @@ def create_project(
 
     # I prepare the project from the validated request.
     project = Project(
+        created_by_id=current_user.id,
         name=payload.name,
         description=payload.description,
         status=payload.status.value,
@@ -89,6 +91,9 @@ def create_project(
     db.add(project)
     db.commit()
     db.refresh(project)
+
+    # I retain the authenticated creator for response serialization.
+    project.created_by = current_user
 
     return project
 
@@ -105,7 +110,11 @@ def get_project(
     """I return a project by its unique identifier."""
 
     # I retrieve the requested project.
-    project = db.get(Project, project_id)
+    project = db.scalar(
+        select(Project)
+        .options(selectinload(Project.created_by))
+        .where(Project.id == project_id)
+    )
 
     if project is None:
         raise HTTPException(
@@ -151,4 +160,8 @@ def update_project(
     db.commit()
     db.refresh(project)
 
-    return project
+    return db.scalar(
+        select(Project)
+        .options(selectinload(Project.created_by))
+        .where(Project.id == project_id)
+    ) or project

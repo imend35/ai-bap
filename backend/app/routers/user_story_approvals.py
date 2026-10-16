@@ -5,21 +5,15 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-
-from sqlalchemy import func
 from sqlalchemy import select
-
-from app.schemas.user_story_audit import (
-    UserStoryApprovalAuditListResponse,
-)
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models import UserStory, UserStoryApprovalAudit
 from app.models.user import User
 from app.role_permissions import ADMIN, REVIEWER, require_roles
 from app.schemas.user_story import UserStoryResponse
-
+from app.schemas.user_story_audit import UserStoryApprovalAuditListResponse
 
 router = APIRouter(
     prefix="/api/v1/user-stories",
@@ -85,7 +79,11 @@ def approve_user_story(
     db.commit()
     db.refresh(story)
 
-    return story
+    return db.scalar(
+        select(UserStory)
+        .options(selectinload(UserStory.created_by))
+        .where(UserStory.id == story_id)
+    ) or story
 
 
 @router.post(
@@ -147,7 +145,11 @@ def reject_user_story(
     db.commit()
     db.refresh(story)
 
-    return story
+    return db.scalar(
+        select(UserStory)
+        .options(selectinload(UserStory.created_by))
+        .where(UserStory.id == story_id)
+    ) or story
 
 
 @router.get(

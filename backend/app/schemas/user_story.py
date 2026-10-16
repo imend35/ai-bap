@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.record_creator import RecordCreator
+
 
 class AcceptanceCriteriaValidation(BaseModel):
     """Provide shared validation for acceptance criteria."""
@@ -94,6 +96,8 @@ class UserStoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    record_number: str = Field(pattern=r"^US-[0-9]{3,}$")
+    created_by: RecordCreator | None
     requirement_id: UUID
     title: str
     description: str

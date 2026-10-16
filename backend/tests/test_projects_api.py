@@ -2,7 +2,6 @@
 """I test project API operations and role-based authorization."""
 
 from contextlib import contextmanager
-from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -13,9 +12,9 @@ from sqlalchemy import select
 from app.database import SessionLocal
 from app.main import app
 from app.models import Project
+from app.models.user import User
 from app.role_permissions import ADMIN, BUSINESS_ANALYST, REVIEWER
 from app.security import get_current_user
-
 
 client = TestClient(app)
 BASE_URL = "/api/v1/projects"
@@ -23,12 +22,25 @@ BASE_URL = "/api/v1/projects"
 
 @contextmanager
 def authenticated_as(role=BUSINESS_ANALYST):
-    """I simulate an authenticated user with a specific role."""
+    """I provide a persisted authenticated user with a specific role."""
+
+    with SessionLocal() as db:
+        user = User(
+            email=f"project-api-{uuid4().hex}@example.com",
+            full_name="Project API Test User",
+            password_hash="test-only-not-for-login",
+            role=role,
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        user_id = user.id
 
     # I override only the user lookup for authorized API tests.
     def get_test_user():
         """I return a controlled user for role verification."""
-        return SimpleNamespace(role=role, is_active=True)
+        return user
 
     app.dependency_overrides[get_current_user] = get_test_user
 
@@ -37,6 +49,12 @@ def authenticated_as(role=BUSINESS_ANALYST):
     finally:
         # I restore the original authentication dependency.
         app.dependency_overrides.pop(get_current_user, None)
+
+        with SessionLocal() as db:
+            persisted_user = db.get(User, user_id)
+            if persisted_user is not None:
+                db.delete(persisted_user)
+                db.commit()
 
 
 @contextmanager

@@ -6,10 +6,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models import Project, Requirement
+from app.models.user import User
 from app.role_permissions import (
     ADMIN,
     BUSINESS_ANALYST,
@@ -22,7 +23,6 @@ from app.schemas.requirement import (
     RequirementResponse,
     RequirementUpdate,
 )
-
 
 router = APIRouter(
     prefix="/api/v1/requirements",
@@ -62,6 +62,7 @@ def list_requirements(
     # I retrieve requirements using consistent pagination and ordering.
     statement = (
         select(Requirement)
+        .options(selectinload(Requirement.created_by))
         .where(Requirement.project_id == project_id)
         .order_by(Requirement.created_at.desc(), Requirement.id.desc())
         .limit(limit)
@@ -82,11 +83,14 @@ def list_requirements(
     "",
     response_model=RequirementResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_roles(ADMIN, BUSINESS_ANALYST))],
 )
 def create_requirement(
     payload: RequirementCreate,
     db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[
+        User,
+        Depends(require_roles(ADMIN, BUSINESS_ANALYST)),
+    ],
 ) -> Requirement:
     """I create a requirement when the user has editing permissions."""
 
@@ -101,6 +105,7 @@ def create_requirement(
 
     # I preserve the existing requirement creation behavior.
     requirement = Requirement(
+        created_by_id=current_user.id,
         project_id=payload.project_id,
         title=payload.title,
         description=payload.description,
@@ -111,6 +116,9 @@ def create_requirement(
     db.add(requirement)
     db.commit()
     db.refresh(requirement)
+
+    # I retain the authenticated creator for response serialization.
+    requirement.created_by = current_user
 
     return requirement
 
@@ -127,7 +135,11 @@ def get_requirement(
     """I return an existing requirement to an authorized user."""
 
     # I retrieve the requested requirement by its unique identifier.
-    requirement = db.get(Requirement, requirement_id)
+    requirement = db.scalar(
+        select(Requirement)
+        .options(selectinload(Requirement.created_by))
+        .where(Requirement.id == requirement_id)
+    )
 
     if requirement is None:
         raise HTTPException(
@@ -172,4 +184,8 @@ def update_requirement(
     db.commit()
     db.refresh(requirement)
 
-    return requirement
+    return db.scalar(
+        select(Requirement)
+        .options(selectinload(Requirement.created_by))
+        .where(Requirement.id == requirement_id)
+    ) or requirement

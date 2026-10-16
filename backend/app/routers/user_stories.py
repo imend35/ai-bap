@@ -6,10 +6,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models import Requirement, UserStory
+from app.models.user import User
 from app.role_permissions import (
     ADMIN,
     BUSINESS_ANALYST,
@@ -30,7 +31,6 @@ from app.services.ai.user_story_generator import (
     AIGenerationError,
     generate_user_story,
 )
-
 
 router = APIRouter(
     prefix="/api/v1/user-stories",
@@ -81,6 +81,7 @@ def list_user_stories(
     # I retrieve user stories using stable ordering and pagination.
     statement = (
         select(UserStory)
+        .options(selectinload(UserStory.created_by))
         .where(UserStory.requirement_id == requirement_id)
         .order_by(UserStory.created_at.desc(), UserStory.id.desc())
         .limit(limit)
@@ -101,13 +102,14 @@ def list_user_stories(
     "",
     response_model=UserStoryResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[
-        Depends(require_roles(ADMIN, BUSINESS_ANALYST))
-    ],
 )
 def create_user_story(
     payload: UserStoryCreate,
     db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[
+        User,
+        Depends(require_roles(ADMIN, BUSINESS_ANALYST)),
+    ],
 ) -> UserStory:
     """I create a new user story for an existing requirement."""
 
@@ -129,6 +131,7 @@ def create_user_story(
 
     # I create the user story without bypassing human review.
     story = UserStory(
+        created_by_id=current_user.id,
         requirement_id=payload.requirement_id,
         title=payload.title,
         description=payload.description,
@@ -140,6 +143,9 @@ def create_user_story(
     db.add(story)
     db.commit()
     db.refresh(story)
+
+    # I retain the authenticated creator for response serialization.
+    story.created_by = current_user
 
     return story
 
@@ -207,7 +213,11 @@ def get_user_story(
     """I return a user story by its unique identifier."""
 
     # I retrieve the requested user story.
-    story = db.get(UserStory, story_id)
+    story = db.scalar(
+        select(UserStory)
+        .options(selectinload(UserStory.created_by))
+        .where(UserStory.id == story_id)
+    )
 
     if story is None:
         raise HTTPException(
@@ -294,4 +304,8 @@ def update_user_story(
     db.commit()
     db.refresh(story)
 
-    return story
+    return db.scalar(
+        select(UserStory)
+        .options(selectinload(UserStory.created_by))
+        .where(UserStory.id == story_id)
+    ) or story

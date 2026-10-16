@@ -10,22 +10,13 @@ from fastapi.testclient import TestClient
 from app.database import SessionLocal
 from app.main import app
 from app.models import Project, Requirement, UserStory
+from app.models.user import User
 from app.role_permissions import ADMIN, BUSINESS_ANALYST, REVIEWER
 from app.security import get_current_user
-
 
 STORIES_URL = "/api/v1/user-stories"
 READ_ROLES = [ADMIN, BUSINESS_ANALYST, REVIEWER]
 WRITE_ROLES = [ADMIN, BUSINESS_ANALYST]
-
-
-class MockUser:
-    """I represent an authenticated user with a selected role."""
-
-    def __init__(self, role: str):
-        self.id = uuid4()
-        self.role = role
-        self.is_active = True
 
 
 @pytest.fixture
@@ -44,10 +35,23 @@ def client():
 
 @pytest.fixture
 def authenticate():
-    """I simulate an authenticated user with the requested role."""
+    """I provide persisted users with the requested role."""
+
+    user_ids = []
 
     def set_role(role: str):
-        user = MockUser(role)
+        with SessionLocal() as db:
+            user = User(
+                email=f"story-api-{uuid4().hex}@example.com",
+                full_name="User Story API Test User",
+                password_hash="test-only-not-for-login",
+                role=role,
+                is_active=True,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            user_ids.append(user.id)
 
         # I override the JWT current-user dependency for this test.
         app.dependency_overrides[get_current_user] = lambda: user
@@ -58,6 +62,13 @@ def authenticate():
 
     # I prevent mocked authentication from leaking into other tests.
     app.dependency_overrides.pop(get_current_user, None)
+
+    with SessionLocal() as db:
+        for user_id in user_ids:
+            user = db.get(User, user_id)
+            if user is not None:
+                db.delete(user)
+        db.commit()
 
 
 @pytest.fixture

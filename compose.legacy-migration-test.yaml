@@ -1,0 +1,29 @@
+name: ai-bap-legacy-migration-test
+
+services:
+  db-legacy-migration-test:
+    image: postgres:16
+    restart: "no"
+
+    environment:
+      POSTGRES_DB: ai_bap_legacy_test
+      POSTGRES_USER: ai_bap_legacy_test_user
+      POSTGRES_PASSWORD: ${AI_BAP_LEGACY_TEST_POSTGRES_PASSWORD:?Set a unique legacy-test-only password in your shell.}
+
+    ports:
+      - "127.0.0.1:55433:5432"
+
+    volumes:
+      - ai_bap_legacy_test_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ai_bap_legacy_test_user -d ai_bap_legacy_test
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  ai_bap_legacy_test_data:

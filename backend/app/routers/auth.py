@@ -18,6 +18,7 @@ from app.schemas.auth import (
     UserRegister,
     UserResponse,
 )
+from app.security import get_current_user
 
 
 router = APIRouter(
@@ -118,3 +119,16 @@ def login_user(
         access_token=access_token,
         token_type="bearer",
     )
+
+@router.get(
+    "/me",
+    response_model=UserResponse,
+)
+def get_my_profile(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """I return the authenticated user's public profile."""
+
+    # I use the verified JWT identity to retrieve my current profile.
+    # I never expose password hashes or authentication secrets.
+    return current_user

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, String, Text, func
+from sqlalchemy import DateTime, Enum, FetchedValue, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,6 +12,7 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.requirement import Requirement
     from app.models.sprint import Sprint
+    from app.models.user import User
 
 class Project(Base):
     """Represent a business analysis project."""
@@ -22,6 +23,20 @@ class Project(Base):
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
+    )
+
+    record_number: Mapped[str] = mapped_column(
+        String(32),
+        unique=True,
+        nullable=False,
+        server_default=FetchedValue(),
+    )
+
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
 
     name: Mapped[str] = mapped_column(
@@ -67,4 +82,7 @@ class Project(Base):
     sprints: Mapped[list["Sprint"]] = relationship(
         back_populates="project",
         cascade="all, delete-orphan",
+    )
+    created_by: Mapped["User | None"] = relationship(
+        back_populates="created_projects",
     )
