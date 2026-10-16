@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_model: str = Field(default="gpt-4.1-mini")
 
+    # I restrict browser access to explicitly allowed frontend origins.
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
+    )
+
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",

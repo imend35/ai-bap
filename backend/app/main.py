@@ -2,7 +2,9 @@
 """I initialize the AI BAP FastAPI application."""
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import get_settings
 from app.routers.auth import router as auth_router
 from app.routers.projects import router as projects_router
 from app.routers.requirements import router as requirements_router
@@ -18,6 +20,17 @@ app = FastAPI(
     title="AI BAP API",
     description="AI-Powered Business Analysis Platform",
     version="1.0.0",
+)
+
+# I configure cross-origin access for approved frontend addresses.
+settings = get_settings()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
