@@ -30,3 +30,9 @@ Thumbs.db
 *.log
 tmp/
 temp/
+
+# Local frontend backups
+/frontend/backups/
+
+# Local Docker test variables
+/docker/*.variables
