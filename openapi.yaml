@@ -172,6 +172,36 @@ paths:
           $ref: "#/components/responses/ValidationError"
 
   /api/v1/admin/users/{user_id}:
+    patch:
+      tags: [Admin Users]
+      operationId: updateAdminUser
+      summary: Update a platform user's name or role as an administrator
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUserUpdate"
+      responses:
+        "200":
+          description: Platform user updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
     get:
       tags: [Admin Users]
       operationId: getAdminUser
@@ -1166,6 +1196,19 @@ components:
         is_active:
           type: boolean
           default: true
+
+    AdminUserUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        full_name:
+          type: string
+          minLength: 2
+          maxLength: 160
+        role:
+          type: string
+          enum: [admin, business_analyst, reviewer]
 
     AdminUserListResponse:
       type: object

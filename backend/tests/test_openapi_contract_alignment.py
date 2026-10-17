@@ -167,6 +167,21 @@ def test_admin_user_routes_match_runtime(
     ) == JWT_SECURITY
     assert runtime_contract["paths"][create_path]["post"]["security"] == JWT_SECURITY
 
+    update_path = "/api/v1/admin/users/{user_id}"
+    for contract in (checked_contract, runtime_contract):
+        update_operation = contract["paths"][update_path]["patch"]
+        assert update_operation["requestBody"]["content"]["application/json"][
+            "schema"
+        ]["$ref"] == "#/components/schemas/AdminUserUpdate"
+        assert response_reference(contract, update_path, "patch", "200") == (
+            "#/components/schemas/AdminUserResponse"
+        )
+
+    assert effective_security(
+        checked_contract, checked_contract["paths"][update_path]["patch"]
+    ) == JWT_SECURITY
+    assert runtime_contract["paths"][update_path]["patch"]["security"] == JWT_SECURITY
+
     checked_create = checked_contract["components"]["schemas"]["AdminUserCreate"]
     runtime_create = runtime_contract["components"]["schemas"]["AdminUserCreate"]
     for create_schema in (checked_create, runtime_create):
@@ -177,6 +192,13 @@ def test_admin_user_routes_match_runtime(
 
     assert checked_create["additionalProperties"] is False
     assert checked_create["properties"]["password"]["writeOnly"] is True
+
+    checked_update = checked_contract["components"]["schemas"]["AdminUserUpdate"]
+    runtime_update = runtime_contract["components"]["schemas"]["AdminUserUpdate"]
+    for update_schema in (checked_update, runtime_update):
+        assert set(update_schema["properties"]) == {"full_name", "role"}
+        assert update_schema["additionalProperties"] is False
+        assert update_schema["minProperties"] == 1
 
     checked_user = checked_contract["components"]["schemas"]["AdminUserResponse"]
     runtime_user = runtime_contract["components"]["schemas"]["AdminUserResponse"]

@@ -17,6 +17,7 @@ from app.schemas.admin_user import (
     AdminUserCreate,
     AdminUserListResponse,
     AdminUserResponse,
+    AdminUserUpdate,
 )
 
 router = APIRouter(prefix="/api/v1/admin/users", tags=["Admin Users"])
@@ -132,5 +133,83 @@ def get_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found.",
         )
+
+    return user
+
+
+@router.patch("/{user_id}", response_model=AdminUserResponse)
+def update_user(
+    user_id: UUID,
+    payload: AdminUserUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(ADMIN))],
+) -> User:
+    """Update a user's name or role while preserving the active-admin invariant."""
+
+    try:
+        if "role" in payload.model_fields_set:
+            # This also covers a no-op role PATCH. Serializing all requested role
+            # changes keeps active-admin membership checks safe and straightforward.
+            acquire_active_admin_lifecycle_lock(db)
+
+            actor = db.scalar(
+                select(User)
+                .where(
+                    User.id == current_user.id,
+                    User.role == ADMIN,
+                    User.is_active.is_(True),
+                )
+                .with_for_update()
+            )
+            if actor is None:
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You do not have permission to perform this action.",
+                )
+
+            user = db.scalar(select(User).where(User.id == user_id).with_for_update())
+        else:
+            user = db.get(User, user_id)
+
+        if user is None:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found.",
+            )
+
+        requested_role = payload.role
+        if (
+            "role" in payload.model_fields_set
+            and user.role == ADMIN
+            and requested_role != ADMIN
+            and user.is_active
+        ):
+            active_admin_count = db.scalar(
+                select(func.count())
+                .select_from(User)
+                .where(User.role == ADMIN, User.is_active.is_(True))
+            ) or 0
+            if active_admin_count <= 1:
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="The last active administrator cannot be demoted.",
+                )
+
+        if "full_name" in payload.model_fields_set:
+            user.full_name = payload.full_name
+        if "role" in payload.model_fields_set:
+            user.role = requested_role
+
+        db.commit()
+        db.refresh(user)
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to update user.",
+        ) from None
 
     return user

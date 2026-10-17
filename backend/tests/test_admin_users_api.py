@@ -2,12 +2,13 @@
 
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from threading import Barrier, Thread
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -297,6 +298,147 @@ def test_admin_user_detail_rejects_malformed_uuid():
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
+def test_admin_updates_only_name_or_role_and_preserves_immutable_account_fields():
+    """I permit partial administrator updates without changing account identity."""
+
+    with temporary_users({"role": REVIEWER}) as user_ids, authenticated_as() as api:
+        with SessionLocal() as db:
+            target = db.get(User, user_ids[0])
+            assert target is not None
+            original = {
+                "email": target.email,
+                "password_hash": target.password_hash,
+                "is_active": target.is_active,
+                "record_number": target.record_number,
+            }
+
+        response = api.patch(
+            f"{BASE_URL}/{user_ids[0]}",
+            json={"full_name": "  Updated Reviewer  ", "role": BUSINESS_ANALYST},
+        )
+
+        assert response.status_code == status.HTTP_200_OK, response.text
+        assert response.json()["full_name"] == "Updated Reviewer"
+        assert response.json()["role"] == BUSINESS_ANALYST
+        with SessionLocal() as db:
+            target = db.get(User, user_ids[0])
+            assert target is not None
+            assert target.email == original["email"]
+            assert target.password_hash == original["password_hash"]
+            assert target.is_active is original["is_active"]
+            assert target.record_number == original["record_number"]
+
+
+def test_admin_update_accepts_valid_noop_and_rejects_invalid_payloads():
+    """I return success for valid no-ops while retaining strict PATCH validation."""
+
+    with temporary_users({"role": REVIEWER}) as user_ids, authenticated_as() as api:
+        noop_response = api.patch(
+            f"{BASE_URL}/{user_ids[0]}",
+            json={"full_name": "Admin User API Test"},
+        )
+        empty_response = api.patch(f"{BASE_URL}/{user_ids[0]}", json={})
+        immutable_response = api.patch(
+            f"{BASE_URL}/{user_ids[0]}", json={"is_active": False}
+        )
+
+    assert noop_response.status_code == status.HTTP_200_OK
+    assert empty_response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+    assert immutable_response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+def test_admin_can_self_demote_when_another_active_admin_remains():
+    """I allow self-demotion only while the active-admin set remains non-empty."""
+
+    with temporary_users({"role": ADMIN}, {"role": ADMIN}) as user_ids:
+        with SessionLocal() as db:
+            actor = db.get(User, user_ids[0])
+            assert actor is not None
+        app.dependency_overrides[get_current_user] = lambda: actor
+        try:
+            response = client.patch(
+                f"{BASE_URL}/{user_ids[0]}", json={"role": BUSINESS_ANALYST}
+            )
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == status.HTTP_200_OK, response.text
+    assert response.json()["role"] == BUSINESS_ANALYST
+
+
+def test_admin_cannot_demote_the_last_active_admin():
+    """I preserve the final active administrator, including self-demotion."""
+
+    with temporary_users({"role": ADMIN}) as user_ids:
+        with SessionLocal() as db:
+            actor = db.get(User, user_ids[0])
+            assert actor is not None
+            active_admin_count = db.scalar(
+                select(func.count())
+                .select_from(User)
+                .where(User.role == ADMIN, User.is_active.is_(True))
+            )
+            assert active_admin_count == 1
+        app.dependency_overrides[get_current_user] = lambda: actor
+        try:
+            response = client.patch(
+                f"{BASE_URL}/{user_ids[0]}", json={"role": BUSINESS_ANALYST}
+            )
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json()["detail"] == "The last active administrator cannot be demoted."
+
+
+def test_concurrent_admin_demotions_leave_one_active_admin():
+    """I serialize concurrent demotions so the active-admin set cannot reach zero."""
+
+    with temporary_users({"role": ADMIN}, {"role": ADMIN}) as user_ids:
+        with SessionLocal() as db:
+            initial_active_admin_count = db.scalar(
+                select(func.count())
+                .select_from(User)
+                .where(User.role == ADMIN, User.is_active.is_(True))
+            )
+        assert initial_active_admin_count == 2
+
+        start = Barrier(2)
+        responses: list[int] = []
+
+        def demote(user_id: UUID) -> None:
+            headers = {"Authorization": f"Bearer {create_access_token(user_id)}"}
+            with TestClient(app) as concurrent_client:
+                start.wait()
+                response = concurrent_client.patch(
+                    f"{BASE_URL}/{user_id}",
+                    json={"role": BUSINESS_ANALYST},
+                    headers=headers,
+                )
+                responses.append(response.status_code)
+
+        threads = [Thread(target=demote, args=(user_id,)) for user_id in user_ids]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        assert all(not thread.is_alive() for thread in threads)
+
+        with SessionLocal() as db:
+            active_admin_count = db.scalar(
+                select(func.count())
+                .select_from(User)
+                .where(User.role == ADMIN, User.is_active.is_(True))
+            )
+
+    assert sorted(responses) == [
+        status.HTTP_200_OK,
+        status.HTTP_409_CONFLICT,
+    ]
+    assert active_admin_count == 1
+
+
 def test_admin_user_endpoints_require_administrator_role():
     """I deny authenticated analysts and reviewers access to both endpoints."""
 
@@ -312,10 +454,14 @@ def test_admin_user_endpoints_require_administrator_role():
                     "password": "TestPassword123!",
                 },
             )
+            update_response = api.patch(
+                f"{BASE_URL}/{uuid4()}", json={"full_name": "Unauthorized User"}
+            )
 
         assert list_response.status_code == status.HTTP_403_FORBIDDEN
         assert detail_response.status_code == status.HTTP_403_FORBIDDEN
         assert create_response.status_code == status.HTTP_403_FORBIDDEN
+        assert update_response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.parametrize("url", [BASE_URL, f"{BASE_URL}/{uuid4()}"])
