@@ -1,0 +1,5 @@
+/backend/migrations/versions/d4e5f6a7b8c9_harden_record_number_trigger_functions.py text eol=lf
+/backend/tests/test_record_number_function_security_followup.py text eol=lf
+/docker/migration-rehearsal/** text eol=lf
+/docs/migration-rehearsal-helper.md text eol=lf
+/.dockerignore text eol=lf

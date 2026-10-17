@@ -1,0 +1,14 @@
+# The repository root is a Docker context only for the rehearsal image.
+# Send only the files copied by docker/migration-rehearsal/Dockerfile.
+**
+!backend/
+!backend/pyproject.toml
+!backend/uv.lock
+!backend/migrations/
+!backend/migrations/**
+!docker/
+!docker/migration-rehearsal/
+!docker/migration-rehearsal/Dockerfile
+!docker/migration-rehearsal/alembic.ini
+!docker/migration-rehearsal/env.py
+!docker/migration-rehearsal/rehearse.py
