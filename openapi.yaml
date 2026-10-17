@@ -171,6 +171,54 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
 
+  /api/v1/admin/users/{user_id}/activate:
+    post:
+      tags: [Admin Users]
+      operationId: activateAdminUser
+      summary: Activate a platform user as an administrator
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Platform user activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/admin/users/{user_id}/deactivate:
+    post:
+      tags: [Admin Users]
+      operationId: deactivateAdminUser
+      summary: Deactivate a platform user as an administrator
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Platform user deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
   /api/v1/admin/users/{user_id}:
     patch:
       tags: [Admin Users]

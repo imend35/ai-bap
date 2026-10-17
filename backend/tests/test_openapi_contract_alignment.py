@@ -182,6 +182,23 @@ def test_admin_user_routes_match_runtime(
     ) == JWT_SECURITY
     assert runtime_contract["paths"][update_path]["patch"]["security"] == JWT_SECURITY
 
+    for path, operation_id in (
+        ("/api/v1/admin/users/{user_id}/activate", "activateAdminUser"),
+        ("/api/v1/admin/users/{user_id}/deactivate", "deactivateAdminUser"),
+    ):
+        for contract in (checked_contract, runtime_contract):
+            operation = contract["paths"][path]["post"]
+            assert operation["operationId"] == operation_id
+            assert response_reference(contract, path, "post", "200") == (
+                "#/components/schemas/AdminUserResponse"
+            )
+
+        assert (
+            effective_security(checked_contract, checked_contract["paths"][path]["post"])
+            == JWT_SECURITY
+        )
+        assert runtime_contract["paths"][path]["post"]["security"] == JWT_SECURITY
+
     checked_create = checked_contract["components"]["schemas"]["AdminUserCreate"]
     runtime_create = runtime_contract["components"]["schemas"]["AdminUserCreate"]
     for create_schema in (checked_create, runtime_create):

@@ -23,6 +23,71 @@ from app.schemas.admin_user import (
 router = APIRouter(prefix="/api/v1/admin/users", tags=["Admin Users"])
 
 
+def change_user_activation(
+    user_id: UUID,
+    is_active: bool,
+    db: Session,
+    current_user: User,
+) -> User:
+    """Change account activation while preserving active-admin availability."""
+
+    try:
+        acquire_active_admin_lifecycle_lock(db)
+
+        actor = db.scalar(
+            select(User)
+            .where(
+                User.id == current_user.id,
+                User.role == ADMIN,
+                User.is_active.is_(True),
+            )
+            .with_for_update()
+        )
+        if actor is None:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action.",
+            )
+
+        user = db.scalar(select(User).where(User.id == user_id).with_for_update())
+        if user is None:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found.",
+            )
+
+        if not is_active and user.is_active and user.role == ADMIN:
+            active_admin_count = (
+                db.scalar(
+                    select(func.count())
+                    .select_from(User)
+                    .where(User.role == ADMIN, User.is_active.is_(True))
+                )
+                or 0
+            )
+            if active_admin_count <= 1:
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="The last active administrator cannot be deactivated.",
+                )
+
+        if user.is_active != is_active:
+            user.is_active = is_active
+            db.commit()
+            db.refresh(user)
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to update user activation.",
+        ) from None
+
+    return user
+
+
 @router.post(
     "",
     response_model=AdminUserResponse,
@@ -135,6 +200,36 @@ def get_user(
         )
 
     return user
+
+
+@router.post(
+    "/{user_id}/activate",
+    response_model=AdminUserResponse,
+    operation_id="activateAdminUser",
+)
+def activate_user(
+    user_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(ADMIN))],
+) -> User:
+    """Activate a platform user as an active administrator."""
+
+    return change_user_activation(user_id, True, db, current_user)
+
+
+@router.post(
+    "/{user_id}/deactivate",
+    response_model=AdminUserResponse,
+    operation_id="deactivateAdminUser",
+)
+def deactivate_user(
+    user_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(ADMIN))],
+) -> User:
+    """Deactivate a platform user while retaining an active administrator."""
+
+    return change_user_activation(user_id, False, db, current_user)
 
 
 @router.patch("/{user_id}", response_model=AdminUserResponse)

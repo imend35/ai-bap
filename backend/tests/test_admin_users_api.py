@@ -439,6 +439,147 @@ def test_concurrent_admin_demotions_leave_one_active_admin():
     assert active_admin_count == 1
 
 
+def test_admin_activation_and_deactivation_preserve_account_identity_fields():
+    """I change only activation state and return the safe administrator schema."""
+
+    with temporary_users({"is_active": False, "role": REVIEWER}) as user_ids:
+        with SessionLocal() as db:
+            target = db.get(User, user_ids[0])
+            assert target is not None
+            immutable_fields = {
+                "id": target.id,
+                "email": target.email,
+                "password_hash": target.password_hash,
+                "role": target.role,
+                "record_number": target.record_number,
+            }
+
+        with authenticated_as() as api:
+            activated = api.post(f"{BASE_URL}/{user_ids[0]}/activate")
+            deactivated = api.post(f"{BASE_URL}/{user_ids[0]}/deactivate")
+
+        assert activated.status_code == status.HTTP_200_OK, activated.text
+        assert activated.json()["is_active"] is True
+        assert {"password", "password_hash", "access_token", "token"}.isdisjoint(activated.json())
+        assert deactivated.status_code == status.HTTP_200_OK, deactivated.text
+        assert deactivated.json()["is_active"] is False
+
+        with SessionLocal() as db:
+            target = db.get(User, user_ids[0])
+            assert target is not None
+            assert target.id == immutable_fields["id"]
+            assert target.email == immutable_fields["email"]
+            assert target.password_hash == immutable_fields["password_hash"]
+            assert target.role == immutable_fields["role"]
+            assert target.record_number == immutable_fields["record_number"]
+
+
+def test_admin_activation_and_deactivation_are_idempotent():
+    """I accept repeated activation-state requests as successful no-ops."""
+
+    with temporary_users({"is_active": False}) as user_ids, authenticated_as() as api:
+        first_activation = api.post(f"{BASE_URL}/{user_ids[0]}/activate")
+        repeated_activation = api.post(f"{BASE_URL}/{user_ids[0]}/activate")
+        first_deactivation = api.post(f"{BASE_URL}/{user_ids[0]}/deactivate")
+        repeated_deactivation = api.post(f"{BASE_URL}/{user_ids[0]}/deactivate")
+
+    assert first_activation.status_code == status.HTTP_200_OK
+    assert repeated_activation.status_code == status.HTTP_200_OK
+    assert first_activation.json()["is_active"] is True
+    assert repeated_activation.json()["is_active"] is True
+    assert first_deactivation.status_code == status.HTTP_200_OK
+    assert repeated_deactivation.status_code == status.HTTP_200_OK
+    assert first_deactivation.json()["is_active"] is False
+    assert repeated_deactivation.json()["is_active"] is False
+
+
+def test_admin_can_self_deactivate_when_another_active_admin_remains():
+    """I permit self-deactivation when it leaves another active administrator."""
+
+    with temporary_users({"role": ADMIN}, {"role": ADMIN}) as user_ids:
+        with SessionLocal() as db:
+            actor = db.get(User, user_ids[0])
+            assert actor is not None
+        app.dependency_overrides[get_current_user] = lambda: actor
+        try:
+            response = client.post(f"{BASE_URL}/{user_ids[0]}/deactivate")
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == status.HTTP_200_OK, response.text
+    assert response.json()["is_active"] is False
+
+
+def test_admin_cannot_deactivate_the_last_active_admin():
+    """I preserve the final active administrator, including self-deactivation."""
+
+    with temporary_users({"role": ADMIN}) as user_ids:
+        with SessionLocal() as db:
+            actor = db.get(User, user_ids[0])
+            assert actor is not None
+        app.dependency_overrides[get_current_user] = lambda: actor
+        try:
+            response = client.post(f"{BASE_URL}/{user_ids[0]}/deactivate")
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json()["detail"] == "The last active administrator cannot be deactivated."
+
+
+def test_concurrent_cross_deactivations_leave_one_admin_and_reject_waiting_actor():
+    """I serialize cross-deactivation so a waiting deactivated actor loses access."""
+
+    with temporary_users({"role": ADMIN}, {"role": ADMIN}) as user_ids:
+        start = Barrier(2)
+        responses: list[int] = []
+
+        def deactivate_other(actor_id: UUID, target_id: UUID) -> None:
+            headers = {"Authorization": f"Bearer {create_access_token(actor_id)}"}
+            with TestClient(app) as concurrent_client:
+                start.wait()
+                response = concurrent_client.post(
+                    f"{BASE_URL}/{target_id}/deactivate",
+                    headers=headers,
+                )
+                responses.append(response.status_code)
+
+        threads = [
+            Thread(target=deactivate_other, args=(user_ids[0], user_ids[1])),
+            Thread(target=deactivate_other, args=(user_ids[1], user_ids[0])),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        assert all(not thread.is_alive() for thread in threads)
+
+        with SessionLocal() as db:
+            active_admin_count = db.scalar(
+                select(func.count())
+                .select_from(User)
+                .where(User.role == ADMIN, User.is_active.is_(True))
+            )
+
+    assert sorted(responses) == [status.HTTP_200_OK, status.HTTP_403_FORBIDDEN]
+    assert active_admin_count == 1
+
+
+def test_deactivation_revokes_existing_token_access_immediately():
+    """I recheck database activation state for requests made with an old token."""
+
+    with temporary_users({"role": BUSINESS_ANALYST}) as user_ids:
+        headers = {"Authorization": f"Bearer {create_access_token(user_ids[0])}"}
+        with authenticated_as() as api:
+            deactivation = api.post(f"{BASE_URL}/{user_ids[0]}/deactivate")
+        profile = client.get("/api/v1/auth/me", headers=headers)
+
+    assert deactivation.status_code == status.HTTP_200_OK, deactivation.text
+    assert profile.status_code == status.HTTP_403_FORBIDDEN
+    assert profile.json()["detail"] == "User account is inactive."
+
+
 def test_admin_user_endpoints_require_administrator_role():
     """I deny authenticated analysts and reviewers access to both endpoints."""
 
@@ -457,11 +598,15 @@ def test_admin_user_endpoints_require_administrator_role():
             update_response = api.patch(
                 f"{BASE_URL}/{uuid4()}", json={"full_name": "Unauthorized User"}
             )
+            activate_response = api.post(f"{BASE_URL}/{uuid4()}/activate")
+            deactivate_response = api.post(f"{BASE_URL}/{uuid4()}/deactivate")
 
         assert list_response.status_code == status.HTTP_403_FORBIDDEN
         assert detail_response.status_code == status.HTTP_403_FORBIDDEN
         assert create_response.status_code == status.HTTP_403_FORBIDDEN
         assert update_response.status_code == status.HTTP_403_FORBIDDEN
+        assert activate_response.status_code == status.HTTP_403_FORBIDDEN
+        assert deactivate_response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.parametrize("url", [BASE_URL, f"{BASE_URL}/{uuid4()}"])
