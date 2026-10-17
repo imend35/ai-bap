@@ -7,18 +7,22 @@ from enum import Enum
 from getpass import getpass
 
 from pydantic import ValidationError
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.admin_user_lifecycle import (
+    ACTIVE_ADMIN_LIFECYCLE_ADVISORY_LOCK_KEY,
+    acquire_active_admin_lifecycle_lock,
+)
 from app.database import SessionLocal
 from app.models.user import User
 from app.password_service import hash_password
 from app.role_permissions import ADMIN
 from app.schemas.auth import UserRegister
 
-# I serialize initial-administrator checks without holding a table-wide lock.
-BOOTSTRAP_ADMIN_ADVISORY_LOCK_KEY = 7_432_094_863_100
+# I retain this public constant for bootstrap callers while sharing its identity.
+BOOTSTRAP_ADMIN_ADVISORY_LOCK_KEY = ACTIVE_ADMIN_LIFECYCLE_ADVISORY_LOCK_KEY
 
 
 class BootstrapAdminResult(str, Enum):
@@ -65,10 +69,7 @@ def bootstrap_initial_admin(
 
     with session_factory() as db:
         try:
-            db.execute(
-                text("SELECT pg_advisory_xact_lock(:lock_key)"),
-                {"lock_key": BOOTSTRAP_ADMIN_ADVISORY_LOCK_KEY},
-            )
+            acquire_active_admin_lifecycle_lock(db)
 
             email_exists = db.scalar(
                 select(User.id).where(User.email == normalized_email).limit(1)

@@ -135,7 +135,7 @@ def test_admin_user_routes_match_runtime(
     checked_contract: dict[str, Any],
     runtime_contract: dict[str, Any],
 ) -> None:
-    """I document the administrator-only user-management read routes."""
+    """I document the administrator-only user-management routes."""
     expected = (
         ("/api/v1/admin/users", "get", "AdminUserListResponse"),
         ("/api/v1/admin/users/{user_id}", "get", "AdminUserResponse"),
@@ -153,6 +153,30 @@ def test_admin_user_routes_match_runtime(
             checked_contract["paths"][path][method],
         ) == JWT_SECURITY
         assert runtime_contract["paths"][path][method]["security"] == JWT_SECURITY
+
+    create_path = "/api/v1/admin/users"
+    assert response_reference(checked_contract, create_path, "post", "201") == (
+        "#/components/schemas/AdminUserResponse"
+    )
+    assert response_reference(runtime_contract, create_path, "post", "201") == (
+        "#/components/schemas/AdminUserResponse"
+    )
+    assert effective_security(
+        checked_contract,
+        checked_contract["paths"][create_path]["post"],
+    ) == JWT_SECURITY
+    assert runtime_contract["paths"][create_path]["post"]["security"] == JWT_SECURITY
+
+    checked_create = checked_contract["components"]["schemas"]["AdminUserCreate"]
+    runtime_create = runtime_contract["components"]["schemas"]["AdminUserCreate"]
+    for create_schema in (checked_create, runtime_create):
+        assert {"email", "full_name", "password"}.issubset(create_schema["required"])
+        assert create_schema["properties"]["role"]["default"] == "business_analyst"
+        assert create_schema["properties"]["is_active"]["default"] is True
+        assert create_schema["properties"]["password"]["minLength"] == 12
+
+    assert checked_create["additionalProperties"] is False
+    assert checked_create["properties"]["password"]["writeOnly"] is True
 
     checked_user = checked_contract["components"]["schemas"]["AdminUserResponse"]
     runtime_user = runtime_contract["components"]["schemas"]["AdminUserResponse"]

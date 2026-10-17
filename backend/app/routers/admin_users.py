@@ -1,18 +1,96 @@
-"""Provide administrator-only read endpoints for platform users."""
+"""Provide administrator-only platform-user management endpoints."""
 
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.admin_user_lifecycle import acquire_active_admin_lifecycle_lock
 from app.database import get_db
 from app.models.user import User
+from app.password_service import hash_password
 from app.role_permissions import ADMIN, require_roles
-from app.schemas.admin_user import AdminUserListResponse, AdminUserResponse
+from app.schemas.admin_user import (
+    AdminUserCreate,
+    AdminUserListResponse,
+    AdminUserResponse,
+)
 
 router = APIRouter(prefix="/api/v1/admin/users", tags=["Admin Users"])
+
+
+@router.post(
+    "",
+    response_model=AdminUserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_user(
+    payload: AdminUserCreate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_roles(ADMIN))],
+) -> User:
+    """Create a platform user after serializing active-admin lifecycle changes."""
+
+    normalized_email = str(payload.email)
+
+    try:
+        acquire_active_admin_lifecycle_lock(db)
+
+        actor = db.scalar(
+            select(User)
+            .where(
+                User.id == current_user.id,
+                User.role == ADMIN,
+                User.is_active.is_(True),
+            )
+            .with_for_update()
+        )
+        if actor is None:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action.",
+            )
+
+        existing_user = db.scalar(
+            select(User.id)
+            .where(func.lower(User.email) == normalized_email)
+            .limit(1)
+        )
+        if existing_user is not None:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this email already exists.",
+            )
+
+        new_user = User(
+            email=normalized_email,
+            full_name=payload.full_name,
+            password_hash=hash_password(payload.password),
+            role=payload.role,
+            is_active=payload.is_active,
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists.",
+        ) from None
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to create user.",
+        ) from None
+
+    return new_user
 
 
 @router.get("", response_model=AdminUserListResponse)
