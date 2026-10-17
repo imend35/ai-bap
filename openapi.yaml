@@ -26,6 +26,8 @@ tags:
 
   - name: Authentication
 
+  - name: Admin Users
+
   - name: Projects
 
   - name: Requirements
@@ -120,6 +122,51 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/users:
+    get:
+      tags: [Admin Users]
+      operationId: listAdminUsers
+      summary: List platform users for an administrator
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Paginated platform users, including inactive accounts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/admin/users/{user_id}:
+    get:
+      tags: [Admin Users]
+      operationId: getAdminUser
+      summary: Get platform user details for an administrator
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Platform user details, including inactive accounts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
 
   /api/v1/projects:
     get:
@@ -836,6 +883,18 @@ components:
 
         format: uuid
 
+    UserId:
+      name: user_id
+
+      in: path
+
+      required: true
+
+      schema:
+        type: string
+
+        format: uuid
+
     RequirementId:
       name: requirement_id
 
@@ -1020,6 +1079,60 @@ components:
           type: string
         is_active:
           type: boolean
+
+    AdminUserResponse:
+      type: object
+      additionalProperties: false
+      required:
+        [id, record_number, email, full_name, role, is_active, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        record_number:
+          type: string
+          pattern: "^USR-[0-9]{3,}$"
+          readOnly: true
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+          maxLength: 160
+        role:
+          type: string
+          enum: [admin, business_analyst, reviewer]
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    AdminUserListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminUserResponse"
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          minimum: 0
 
     TokenResponse:
       type: object

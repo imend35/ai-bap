@@ -131,6 +131,47 @@ def test_authentication_routes_match_runtime(
     assert runtime_contract["paths"][profile_path]["get"]["security"] == JWT_SECURITY
 
 
+def test_admin_user_routes_match_runtime(
+    checked_contract: dict[str, Any],
+    runtime_contract: dict[str, Any],
+) -> None:
+    """I document the administrator-only user-management read routes."""
+    expected = (
+        ("/api/v1/admin/users", "get", "AdminUserListResponse"),
+        ("/api/v1/admin/users/{user_id}", "get", "AdminUserResponse"),
+    )
+
+    for path, method, response_schema in expected:
+        assert response_reference(checked_contract, path, method, "200") == (
+            f"#/components/schemas/{response_schema}"
+        )
+        assert response_reference(runtime_contract, path, method, "200") == (
+            f"#/components/schemas/{response_schema}"
+        )
+        assert effective_security(
+            checked_contract,
+            checked_contract["paths"][path][method],
+        ) == JWT_SECURITY
+        assert runtime_contract["paths"][path][method]["security"] == JWT_SECURITY
+
+    checked_user = checked_contract["components"]["schemas"]["AdminUserResponse"]
+    runtime_user = runtime_contract["components"]["schemas"]["AdminUserResponse"]
+    required_fields = {
+        "id",
+        "record_number",
+        "email",
+        "full_name",
+        "role",
+        "is_active",
+        "created_at",
+        "updated_at",
+    }
+    assert required_fields.issubset(checked_user["required"])
+    assert required_fields.issubset(runtime_user["required"])
+    assert checked_user["properties"]["record_number"]["readOnly"] is True
+    assert checked_user["properties"]["record_number"]["pattern"] == "^USR-[0-9]{3,}$"
+
+
 def test_identity_response_schemas_match_runtime_fields(
     checked_contract: dict[str, Any],
     runtime_contract: dict[str, Any],

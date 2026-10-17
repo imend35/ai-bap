@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.routers.admin_users import router as admin_users_router
 from app.routers.auth import router as auth_router
 from app.routers.projects import router as projects_router
 from app.routers.requirements import router as requirements_router
@@ -42,6 +43,9 @@ def health_check() -> dict[str, str]:
 
 # I register the authentication endpoints.
 app.include_router(auth_router)
+
+# I register administrator-only user-management read endpoints.
+app.include_router(admin_users_router)
 
 # I register the existing business analysis endpoints.
 app.include_router(projects_router)
