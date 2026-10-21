@@ -22,6 +22,11 @@ from app.schemas.task import (
     TaskResponse,
     TaskUpdate,
 )
+from app.services.project_archive import (
+    lock_writable_project,
+    resolve_project_id_for_task,
+    resolve_project_id_for_user_story,
+)
 
 
 router = APIRouter(
@@ -125,6 +130,15 @@ def create_task(
 ) -> Task:
     """I create a task only for an approved user story."""
 
+    project_id = resolve_project_id_for_user_story(db, payload.story_id)
+    if project_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User Story not found.",
+        )
+
+    lock_writable_project(db, project_id)
+
     # I verify that the selected user story exists.
     story = db.get(UserStory, payload.story_id)
 
@@ -204,6 +218,15 @@ def update_task(
     db: Annotated[Session, Depends(get_db)],
 ) -> Task:
     """I update task fields while validating sprint assignments."""
+
+    project_id = resolve_project_id_for_task(db, task_id)
+    if project_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found.",
+        )
+
+    lock_writable_project(db, project_id)
 
     # I verify that the requested task exists.
     task = db.get(Task, task_id)

@@ -17,6 +17,10 @@ from app.role_permissions import (
     REVIEWER,
     require_roles,
 )
+from app.services.project_archive import (
+    lock_writable_project,
+    resolve_project_id_for_requirement,
+)
 from app.schemas.requirement import (
     RequirementCreate,
     RequirementListResponse,
@@ -94,14 +98,8 @@ def create_requirement(
 ) -> Requirement:
     """I create a requirement when the user has editing permissions."""
 
-    # I ensure that the parent project exists before creating a requirement.
-    project = db.get(Project, payload.project_id)
-
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found.",
-        )
+    # I lock and verify the parent project before creating a requirement.
+    lock_writable_project(db, payload.project_id)
 
     # I preserve the existing requirement creation behavior.
     requirement = Requirement(
@@ -162,7 +160,18 @@ def update_requirement(
 ) -> Requirement:
     """I update a requirement when the user has editing permissions."""
 
-    # I verify that the requirement exists before applying changes.
+    project_id = resolve_project_id_for_requirement(db, requirement_id)
+
+    if project_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Requirement not found.",
+        )
+
+    # I lock and verify the parent project before retrieving the requirement.
+    lock_writable_project(db, project_id)
+
+    # I verify that the requirement still exists before applying changes.
     requirement = db.get(Requirement, requirement_id)
 
     if requirement is None:

@@ -79,6 +79,12 @@ class User(Base):
     created_projects: Mapped[list["Project"]] = relationship(
         back_populates="created_by",
         passive_deletes=True,
+        foreign_keys="Project.created_by_id",
+    )
+    archived_projects: Mapped[list["Project"]] = relationship(
+        back_populates="archived_by",
+        passive_deletes=True,
+        foreign_keys="Project.archived_by_id",
     )
     created_requirements: Mapped[list["Requirement"]] = relationship(
         back_populates="created_by",

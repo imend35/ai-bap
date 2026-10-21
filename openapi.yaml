@@ -280,7 +280,27 @@ paths:
 
       summary: List projects
 
+      description: >-
+        Returns only unarchived projects when archived is false (the default),
+        and only archived projects when archived is true. total is computed
+        after archive filtering and before pagination.
+
       parameters:
+        - name: archived
+
+          in: query
+
+          required: false
+
+          description: >-
+            false returns unarchived projects only; true returns archived
+            projects only.
+
+          schema:
+            type: boolean
+
+            default: false
+
         - $ref: "#/components/parameters/Limit"
 
         - $ref: "#/components/parameters/Offset"
@@ -330,6 +350,98 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
 
+  /api/v1/projects/{project_id}/dashboard:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+
+    get:
+      tags: [Projects]
+
+      operationId: getProjectDashboard
+
+      summary: Get stored-record delivery summary for a project
+
+      description: >-
+        Returns project-scoped dashboard counts computed from stored records.
+        approved_user_stories counts user stories whose status is approved, and
+        active_sprints counts sprints whose status is active rather than
+        determining activity from dates. For a project with no related records,
+        all counts are zero and tasks_by_status includes every task status key.
+        Archived projects remain readable to authorized reader roles.
+
+      responses:
+        "200":
+          description: Project dashboard summary
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDashboardResponse"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+        "404":
+          description: Project not found.
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/projects/{project_id}/traceability:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/Limit"
+      - $ref: "#/components/parameters/Offset"
+
+    get:
+      tags: [Projects]
+
+      operationId: getProjectTraceability
+
+      summary: Get requirement-to-story-to-task traceability for a project
+
+      description: >-
+        Returns a project-scoped, read-only Requirement to User Story to Task
+        hierarchy. Root Requirements use stable created_at descending, id
+        descending pagination; their nested stories and tasks are complete for
+        every returned Requirement in this MVP. Requirements without stories
+        and stories without tasks use empty arrays. A project with no
+        requirements returns items: [] and total: 0. An offset beyond total
+        returns an empty items array; UI offset normalization is client behavior.
+        Unusually large child fan-out can produce larger responses. Archived
+        projects remain readable to authorized reader roles.
+
+      responses:
+        "200":
+          description: Paginated project traceability hierarchy
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectTraceabilityResponse"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+        "404":
+          description: Project not found.
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
   /api/v1/projects/{project_id}:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
@@ -340,6 +452,8 @@ paths:
       operationId: getProject
 
       summary: Get a project
+
+      description: Archived projects remain readable by ID to authorized reader roles.
 
       responses:
         "200":
@@ -385,6 +499,85 @@ paths:
 
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/projects/{project_id}/archive:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+
+    post:
+      tags: [Projects]
+
+      operationId: archiveProject
+
+      summary: Archive a project
+
+      description: >-
+        Requires bearer authentication and Admin authorization. Records the
+        archive timestamp and actor identity without changing Project.status or
+        any child status. Active Sprints and in-progress Tasks do not prevent
+        archiving. Repeated archive requests return 200 with the original
+        archive metadata unchanged.
+
+      responses:
+        "200":
+          description: Archived project
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/projects/{project_id}/restore:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+
+    post:
+      tags: [Projects]
+
+      operationId: restoreProject
+
+      summary: Restore an archived project
+
+      description: >-
+        Requires bearer authentication and Admin authorization. Clears archive
+        metadata and preserves Project.status and all child statuses. Repeated
+        restore requests return 200 with the unarchived state unchanged.
+
+      responses:
+        "200":
+          description: Restored project
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
         "404":
           $ref: "#/components/responses/NotFound"
@@ -470,6 +663,9 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
 
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v1/requirements/{requirement_id}:
     parameters:
       - $ref: "#/components/parameters/RequirementId"
@@ -532,6 +728,9 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
 
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v1/user-stories:
     get:
       tags: [User Stories]
@@ -584,6 +783,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /api/v1/user-stories/generate:
     post:
       tags: [User Stories]
@@ -612,6 +813,8 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/user-stories/{story_id}:
     parameters:
@@ -656,6 +859,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/user-stories/{story_id}/approve:
     parameters:
@@ -781,6 +986,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/tasks/{task_id}:
     parameters:
@@ -833,6 +1040,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/sprints:
     get:
@@ -887,6 +1096,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/sprints/{sprint_id}:
     parameters:
@@ -940,6 +1151,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
 components:
   securitySchemes:
@@ -1044,7 +1257,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
 
     Conflict:
-      description: Request conflicts with the current resource state
+      description: >-
+        Request conflicts with the current resource state. For a write blocked
+        because its project is archived, ErrorResponse.detail is: Archived
+        projects are read-only. Restore the project before making changes.
+        Authorization is evaluated first; unauthorized writers receive 403
+        before archive-state validation.
       content:
         application/json:
           schema:
@@ -1335,48 +1553,79 @@ components:
           $ref: "#/components/schemas/ProjectStatus"
 
     ProjectResponse:
-      allOf:
-        - $ref: "#/components/schemas/ProjectCreate"
+      type: object
 
-        - type: object
+      additionalProperties: false
 
-          required: [id, record_number, name, status, created_by, created_at, updated_at]
+      required:
+        [id, record_number, name, status, created_by, archived_at, archived_by, created_at, updated_at]
 
-          properties:
-            id:
-              type: string
+      properties:
+        id:
+          type: string
 
-              format: uuid
+          format: uuid
 
-            record_number:
-              type: string
+        record_number:
+          type: string
 
-              pattern: "^PRJ-[0-9]{3,}$"
+          pattern: "^PRJ-[0-9]{3,}$"
 
-              readOnly: true
+          readOnly: true
 
-            created_by:
-              description: >-
-                Creator identity when known; null for historical records whose
-                creator was not recorded or is no longer available.
-              anyOf:
-                - $ref: "#/components/schemas/RecordCreator"
-                - type: "null"
+        created_by:
+          description: >-
+            Creator identity when known; null for historical records whose
+            creator was not recorded or is no longer available.
+          anyOf:
+            - $ref: "#/components/schemas/RecordCreator"
+            - type: "null"
 
-              readOnly: true
+          readOnly: true
 
-            status:
-              $ref: "#/components/schemas/ProjectStatus"
+        name:
+          type: string
 
-            created_at:
-              type: string
+          minLength: 1
 
+          maxLength: 120
+
+        description:
+          type:
+            - string
+            - "null"
+
+          maxLength: 2000
+
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+
+        archived_at:
+          description: Archive timestamp; null when the project is unarchived.
+          anyOf:
+            - type: string
               format: date-time
+            - type: "null"
 
-            updated_at:
-              type: string
+          readOnly: true
 
-              format: date-time
+        archived_by:
+          description: Archive actor identity; null when the project is unarchived.
+          anyOf:
+            - $ref: "#/components/schemas/RecordCreator"
+            - type: "null"
+
+          readOnly: true
+
+        created_at:
+          type: string
+
+          format: date-time
+
+        updated_at:
+          type: string
+
+          format: date-time
 
     ProjectListResponse:
       type: object
@@ -1402,6 +1651,215 @@ components:
 
         offset:
           type: integer
+
+    TaskStatusCounts:
+      type: object
+
+      description: >-
+        Project-scoped task counts by status. Every supported task status is
+        present, including status values with a count of zero.
+
+      additionalProperties: false
+
+      required: [todo, in_progress, in_review, done]
+
+      properties:
+        todo:
+          type: integer
+
+          minimum: 0
+
+        in_progress:
+          type: integer
+
+          minimum: 0
+
+        in_review:
+          type: integer
+
+          minimum: 0
+
+        done:
+          type: integer
+
+          minimum: 0
+
+    ProjectDashboardResponse:
+      type: object
+
+      description: All dashboard counts are scoped to project_id and computed from stored records.
+
+      additionalProperties: false
+
+      required:
+        [
+          project_id,
+          total_requirements,
+          approved_user_stories,
+          tasks_by_status,
+          active_sprints,
+        ]
+
+      properties:
+        project_id:
+          type: string
+
+          format: uuid
+
+        total_requirements:
+          type: integer
+
+          minimum: 0
+
+        approved_user_stories:
+          description: Count of user stories whose persisted status is approved.
+
+          type: integer
+
+          minimum: 0
+
+        tasks_by_status:
+          $ref: "#/components/schemas/TaskStatusCounts"
+
+        active_sprints:
+          description: Count of sprints whose persisted status is active; this is not date-based activity.
+
+          type: integer
+
+          minimum: 0
+
+    ProjectTraceabilityResponse:
+      type: object
+
+      description: >-
+        A root-Requirement page of the selected project's persisted
+        traceability hierarchy. total counts all Requirements in the project.
+
+      additionalProperties: false
+
+      required: [items, total, limit, offset]
+
+      properties:
+        items:
+          type: array
+
+          description: Root Requirements for the requested page.
+
+          items:
+            $ref: "#/components/schemas/TraceabilityRequirement"
+
+        total:
+          type: integer
+
+          minimum: 0
+
+        limit:
+          type: integer
+
+          minimum: 1
+
+          maximum: 100
+
+        offset:
+          type: integer
+
+          minimum: 0
+
+    TraceabilityRequirement:
+      type: object
+
+      description: >-
+        A persisted Requirement and its complete persisted User Story children
+        for the returned root Requirement page.
+
+      additionalProperties: false
+
+      required: [id, record_number, title, status, priority, stories]
+
+      properties:
+        id:
+          type: string
+
+          format: uuid
+
+        record_number:
+          type: string
+
+          pattern: "^REQ-[0-9]{3,}$"
+
+        title:
+          type: string
+
+        status:
+          $ref: "#/components/schemas/RequirementStatus"
+
+        priority:
+          $ref: "#/components/schemas/RequirementPriority"
+
+        stories:
+          type: array
+
+          description: Empty when the Requirement has no persisted User Stories.
+
+          items:
+            $ref: "#/components/schemas/TraceabilityStory"
+
+    TraceabilityStory:
+      type: object
+
+      description: >-
+        A persisted User Story and its complete persisted Task children for its
+        returned parent Requirement. All persisted story statuses are included.
+
+      additionalProperties: false
+
+      required: [id, record_number, title, status, tasks]
+
+      properties:
+        id:
+          type: string
+
+          format: uuid
+
+        record_number:
+          type: string
+
+          pattern: "^US-[0-9]{3,}$"
+
+        title:
+          type: string
+
+        status:
+          $ref: "#/components/schemas/UserStoryStatus"
+
+        tasks:
+          type: array
+
+          description: Empty when the User Story has no persisted Tasks.
+
+          items:
+            $ref: "#/components/schemas/TraceabilityTask"
+
+    TraceabilityTask:
+      type: object
+
+      description: A persisted Task linked to a returned User Story.
+
+      additionalProperties: false
+
+      required: [id, title, status]
+
+      properties:
+        id:
+          type: string
+
+          format: uuid
+
+        title:
+          type: string
+
+        status:
+          $ref: "#/components/schemas/TaskStatus"
 
     RequirementCreate:
       type: object
@@ -1465,72 +1923,70 @@ components:
           $ref: "#/components/schemas/RequirementStatus"
 
     RequirementResponse:
-      allOf:
-        - $ref: "#/components/schemas/RequirementCreate"
+      type: object
 
-        - type: object
+      additionalProperties: false
 
-          required:
-            [
-              id,
+      required:
+        [id, record_number, project_id, title, description, priority, status, created_by, created_at, updated_at]
 
-              record_number,
+      properties:
+        id:
+          type: string
 
-              project_id,
+          format: uuid
 
-              title,
+        record_number:
+          type: string
 
-              description,
+          pattern: "^REQ-[0-9]{3,}$"
 
-              priority,
+          readOnly: true
 
-              status,
+        created_by:
+          description: >-
+            Creator identity when known; null for historical records whose
+            creator was not recorded or is no longer available.
+          anyOf:
+            - $ref: "#/components/schemas/RecordCreator"
+            - type: "null"
 
-              created_by,
+          readOnly: true
 
-              created_at,
+        project_id:
+          type: string
 
-              updated_at,
-            ]
+          format: uuid
 
-          properties:
-            id:
-              type: string
+        title:
+          type: string
 
-              format: uuid
+          minLength: 1
 
-            record_number:
-              type: string
+          maxLength: 160
 
-              pattern: "^REQ-[0-9]{3,}$"
+        description:
+          type: string
 
-              readOnly: true
+          minLength: 1
 
-            created_by:
-              description: >-
-                Creator identity when known; null for historical records whose
-                creator was not recorded or is no longer available.
-              anyOf:
-                - $ref: "#/components/schemas/RecordCreator"
-                - type: "null"
+          maxLength: 5000
 
-              readOnly: true
+        priority:
+          $ref: "#/components/schemas/RequirementPriority"
 
-            priority:
-              $ref: "#/components/schemas/RequirementPriority"
+        status:
+          $ref: "#/components/schemas/RequirementStatus"
 
-            status:
-              $ref: "#/components/schemas/RequirementStatus"
+        created_at:
+          type: string
 
-            created_at:
-              type: string
+          format: date-time
 
-              format: date-time
+        updated_at:
+          type: string
 
-            updated_at:
-              type: string
-
-              format: date-time
+          format: date-time
 
     RequirementListResponse:
       type: object
@@ -1609,46 +2065,54 @@ components:
           $ref: "#/components/schemas/UserStoryStatus"
 
     UserStoryResponse:
-      allOf:
-        - $ref: "#/components/schemas/UserStoryCreate"
-        - type: object
-          required:
-            [
-              id,
-              record_number,
-              requirement_id,
-              title,
-              description,
-              acceptance_criteria,
-              status,
-              created_by,
-              created_at,
-              updated_at,
-            ]
-          properties:
-            id:
-              type: string
-              format: uuid
-            record_number:
-              type: string
-              pattern: "^US-[0-9]{3,}$"
-              readOnly: true
-            created_by:
-              description: >-
-                Creator identity when known; null for historical records whose
-                creator was not recorded or is no longer available.
-              anyOf:
-                - $ref: "#/components/schemas/RecordCreator"
-                - type: "null"
-              readOnly: true
-            status:
-              $ref: "#/components/schemas/UserStoryStatus"
-            created_at:
-              type: string
-              format: date-time
-            updated_at:
-              type: string
-              format: date-time
+      type: object
+      additionalProperties: false
+      required:
+        [id, record_number, requirement_id, title, description, acceptance_criteria, status, created_by, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        record_number:
+          type: string
+          pattern: "^US-[0-9]{3,}$"
+          readOnly: true
+        created_by:
+          description: >-
+            Creator identity when known; null for historical records whose
+            creator was not recorded or is no longer available.
+          anyOf:
+            - $ref: "#/components/schemas/RecordCreator"
+            - type: "null"
+          readOnly: true
+        requirement_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+        description:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          description: User story narrative, preferably As a / I want / So that.
+        acceptance_criteria:
+          type: array
+          description: Editable acceptance criteria belonging to this story.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 1000
+          maxItems: 30
+        status:
+          $ref: "#/components/schemas/UserStoryStatus"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
     UserStoryListResponse:
       type: object
@@ -1776,6 +2240,12 @@ components:
           type: string
           format: uuid
           description: ID of the user story associated with this task.
+        sprint_id:
+          description: Optional sprint assignment. When omitted or null, the task is created unassigned.
+          anyOf:
+            - type: string
+              format: uuid
+            - type: "null"
         title:
           type: string
           minLength: 1
@@ -1791,6 +2261,12 @@ components:
       additionalProperties: false
       minProperties: 1
       properties:
+        sprint_id:
+          description: Optional sprint assignment. Omit to preserve the current assignment; set to null to unassign the task.
+          anyOf:
+            - type: string
+              format: uuid
+            - type: "null"
         title:
           type: string
           minLength: 1
@@ -1807,6 +2283,7 @@ components:
       required:
         - id
         - story_id
+        - sprint_id
         - title
         - description
         - status
@@ -1819,6 +2296,12 @@ components:
         story_id:
           type: string
           format: uuid
+        sprint_id:
+          description: Sprint currently assigned to the task; null when the task is unassigned.
+          anyOf:
+            - type: string
+              format: uuid
+            - type: "null"
         title:
           type: string
           minLength: 1

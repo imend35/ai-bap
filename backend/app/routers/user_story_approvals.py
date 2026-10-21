@@ -14,6 +14,10 @@ from app.models.user import User
 from app.role_permissions import ADMIN, REVIEWER, require_roles
 from app.schemas.user_story import UserStoryResponse
 from app.schemas.user_story_audit import UserStoryApprovalAuditListResponse
+from app.services.project_archive import (
+    lock_writable_project,
+    resolve_project_id_for_user_story,
+)
 
 router = APIRouter(
     prefix="/api/v1/user-stories",
@@ -34,6 +38,15 @@ def approve_user_story(
     ],
 ) -> UserStory:
     """I approve a reviewed user story and record the decision."""
+
+    project_id = resolve_project_id_for_user_story(db, story_id)
+    if project_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User Story not found.",
+        )
+
+    lock_writable_project(db, project_id)
 
     # I retrieve and lock the user story to prevent concurrent decisions.
     story = (
@@ -99,6 +112,15 @@ def reject_user_story(
     ],
 ) -> UserStory:
     """I reject a reviewed user story and record the decision."""
+
+    project_id = resolve_project_id_for_user_story(db, story_id)
+    if project_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User Story not found.",
+        )
+
+    lock_writable_project(db, project_id)
 
     # I retrieve and lock the user story to prevent concurrent decisions.
     story = (

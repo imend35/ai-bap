@@ -36,3 +36,6 @@ temp/
 
 # Local Docker test variables
 /docker/*.variables
+
+# Local database backups
+backend/backups/

@@ -22,6 +22,10 @@ from app.schemas.sprint import (
     SprintResponse,
     SprintUpdate,
 )
+from app.services.project_archive import (
+    lock_writable_project,
+    resolve_project_id_for_sprint,
+)
 
 
 router = APIRouter(
@@ -94,14 +98,8 @@ def create_sprint(
 ) -> Sprint:
     """I create a sprint for an existing project."""
 
-    # I verify that the parent project exists.
-    project = db.get(Project, payload.project_id)
-
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found.",
-        )
+    # I lock the parent project and verify that it accepts writes.
+    lock_writable_project(db, payload.project_id)
 
     # I create the sprint using the validated request payload.
     sprint = Sprint(
@@ -158,6 +156,15 @@ def update_sprint(
     db: Annotated[Session, Depends(get_db)],
 ) -> Sprint:
     """I update a sprint while preserving a valid date range."""
+
+    project_id = resolve_project_id_for_sprint(db, sprint_id)
+    if project_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sprint not found.",
+        )
+
+    lock_writable_project(db, project_id)
 
     # I verify that the sprint exists before applying changes.
     sprint = db.get(Sprint, sprint_id)

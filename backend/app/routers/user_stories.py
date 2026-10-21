@@ -31,6 +31,11 @@ from app.services.ai.user_story_generator import (
     AIGenerationError,
     generate_user_story,
 )
+from app.services.project_archive import (
+    lock_writable_project,
+    resolve_project_id_for_requirement,
+    resolve_project_id_for_user_story,
+)
 
 router = APIRouter(
     prefix="/api/v1/user-stories",
@@ -113,20 +118,31 @@ def create_user_story(
 ) -> UserStory:
     """I create a new user story for an existing requirement."""
 
-    # I require all new user stories to start in draft status.
-    if payload.status.value != "draft":
+    project_id = resolve_project_id_for_requirement(db, payload.requirement_id)
+
+    if project_id is None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="New User Stories must start in draft status.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Requirement not found.",
         )
 
-    # I verify that the related requirement exists.
+    # I lock and verify the parent project before creating a user story.
+    lock_writable_project(db, project_id)
+
+    # I verify that the related requirement still exists.
     requirement = db.get(Requirement, payload.requirement_id)
 
     if requirement is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Requirement not found.",
+        )
+
+    # I require all new user stories to start in draft status.
+    if payload.status.value != "draft":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="New User Stories must start in draft status.",
         )
 
     # I create the user story without bypassing human review.
@@ -164,7 +180,18 @@ def generate_user_story_draft(
 ) -> AIUserStoryGenerateResponse:
     """I generate an AI-assisted user story draft without saving it."""
 
-    # I verify that the related requirement exists.
+    project_id = resolve_project_id_for_requirement(db, payload.requirement_id)
+
+    if project_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Requirement not found.",
+        )
+
+    # I lock and verify the project in a short transaction before generation.
+    lock_writable_project(db, project_id)
+
+    # I retrieve the requirement after taking the project lock.
     requirement = db.get(Requirement, payload.requirement_id)
 
     if requirement is None:
@@ -172,6 +199,9 @@ def generate_user_story_draft(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Requirement not found.",
         )
+
+    # I release the project lock before invoking the external AI provider.
+    db.commit()
 
     try:
         # I generate a draft using the requirement details.
@@ -187,6 +217,18 @@ def generate_user_story_draft(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI user story generation is currently unavailable.",
         ) from exc
+
+    project_id = resolve_project_id_for_requirement(db, payload.requirement_id)
+
+    if project_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Requirement not found.",
+        )
+
+    # I re-lock and verify the project after generation before responding.
+    lock_writable_project(db, project_id)
+    db.commit()
 
     # I require human review before saving generated content.
     return AIUserStoryGenerateResponse(
@@ -242,7 +284,18 @@ def update_user_story(
 ) -> UserStory:
     """I update user stories while protecting approval decisions."""
 
-    # I verify that the requested user story exists.
+    project_id = resolve_project_id_for_user_story(db, story_id)
+
+    if project_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User Story not found.",
+        )
+
+    # I lock and verify the parent project before retrieving the user story.
+    lock_writable_project(db, project_id)
+
+    # I verify that the requested user story still exists.
     story = db.get(UserStory, story_id)
 
     if story is None:

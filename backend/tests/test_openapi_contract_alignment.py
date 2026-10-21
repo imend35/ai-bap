@@ -340,3 +340,264 @@ def test_intentional_documentation_enhancements_are_explicit(
     assert "409" not in runtime_contract["paths"]["/api/v1/user-stories/{story_id}/approve"][
         "post"
     ]["responses"]
+
+
+def test_task_sprint_assignment_schemas_match_runtime(
+    checked_contract: dict[str, Any],
+    runtime_contract: dict[str, Any],
+) -> None:
+    """I keep task sprint assignment create, update, and response contracts aligned."""
+    expected_sprint_id_schema = [
+        {"type": "string", "format": "uuid"},
+        {"type": "null"},
+    ]
+
+    for contract in (checked_contract, runtime_contract):
+        assert (
+            contract["paths"]["/api/v1/tasks"]["post"]["requestBody"]["content"][
+                "application/json"
+            ]["schema"]["$ref"]
+            == "#/components/schemas/TaskCreate"
+        )
+        assert (
+            contract["paths"]["/api/v1/tasks/{task_id}"]["patch"]["requestBody"][
+                "content"
+            ]["application/json"]["schema"]["$ref"]
+            == "#/components/schemas/TaskUpdate"
+        )
+        assert response_reference(contract, "/api/v1/tasks", "post", "201") == (
+            "#/components/schemas/Task"
+        )
+        assert response_reference(contract, "/api/v1/tasks/{task_id}", "patch", "200") == (
+            "#/components/schemas/Task"
+        )
+
+        schemas = contract["components"]["schemas"]
+        task_create = schemas["TaskCreate"]
+        task_update = schemas["TaskUpdate"]
+        task_response = schemas["Task"]
+
+        for task_schema in (task_create, task_update, task_response):
+            assert task_schema["properties"]["sprint_id"]["anyOf"] == expected_sprint_id_schema
+
+        assert "sprint_id" not in task_create.get("required", [])
+        assert "sprint_id" not in task_update.get("required", [])
+        assert "sprint_id" in task_response["required"]
+        assert task_update["minProperties"] == 1
+        assert task_update["properties"]["status"] == {
+            "$ref": "#/components/schemas/TaskStatus"
+        }
+
+    documented_update = checked_contract["components"]["schemas"]["TaskUpdate"]
+    assert "Omit" in documented_update["properties"]["sprint_id"]["description"]
+    assert "null" in documented_update["properties"]["sprint_id"]["description"]
+
+
+def test_project_dashboard_contract_matches_runtime(
+    checked_contract: dict[str, Any],
+    runtime_contract: dict[str, Any],
+) -> None:
+    """Keep the project dashboard operation and aggregate response contract aligned."""
+    dashboard_path = "/api/v1/projects/{project_id}/dashboard"
+    response_fields = {
+        "project_id",
+        "total_requirements",
+        "approved_user_stories",
+        "tasks_by_status",
+        "active_sprints",
+    }
+    task_status_fields = {"todo", "in_progress", "in_review", "done"}
+
+    assert checked_contract["paths"][dashboard_path]["parameters"] == [
+        {"$ref": "#/components/parameters/ProjectId"}
+    ]
+
+    for contract in (checked_contract, runtime_contract):
+        path_item = contract["paths"][dashboard_path]
+        operation = path_item["get"]
+        assert operation["operationId"] == "getProjectDashboard"
+        assert response_reference(contract, dashboard_path, "get", "200") == (
+            "#/components/schemas/ProjectDashboardResponse"
+        )
+
+        parameters = [
+            *path_item.get("parameters", []),
+            *operation.get("parameters", []),
+        ]
+        project_id_parameter = next(
+            parameter
+            for parameter in parameters
+            if (
+                contract["components"]["parameters"][
+                    parameter["$ref"].rsplit("/", maxsplit=1)[1]
+                ]
+                if "$ref" in parameter
+                else parameter
+            )["name"]
+            == "project_id"
+        )
+        if "$ref" in project_id_parameter:
+            project_id_parameter = contract["components"]["parameters"][
+                project_id_parameter["$ref"].rsplit("/", maxsplit=1)[1]
+            ]
+        assert project_id_parameter["in"] == "path"
+        assert project_id_parameter["required"] is True
+        assert project_id_parameter["schema"]["type"] == "string"
+        assert project_id_parameter["schema"]["format"] == "uuid"
+
+        schemas = contract["components"]["schemas"]
+        dashboard_response = schemas["ProjectDashboardResponse"]
+        task_status_counts = schemas["TaskStatusCounts"]
+
+        assert dashboard_response["additionalProperties"] is False
+        assert set(dashboard_response["required"]) == response_fields
+        assert set(dashboard_response["properties"]) == response_fields
+        project_id = dashboard_response["properties"]["project_id"]
+        assert project_id["type"] == "string"
+        assert project_id["format"] == "uuid"
+        for field_name in (
+            "total_requirements",
+            "approved_user_stories",
+            "active_sprints",
+        ):
+            field = dashboard_response["properties"][field_name]
+            assert field["type"] == "integer"
+            assert field["minimum"] == 0
+        assert dashboard_response["properties"]["tasks_by_status"]["$ref"] == (
+            "#/components/schemas/TaskStatusCounts"
+        )
+
+        assert task_status_counts["additionalProperties"] is False
+        assert set(task_status_counts["required"]) == task_status_fields
+        assert set(task_status_counts["properties"]) == task_status_fields
+        for field in task_status_counts["properties"].values():
+            assert field["type"] == "integer"
+            assert field["minimum"] == 0
+
+
+def test_project_traceability_contract_matches_runtime(
+    checked_contract: dict[str, Any],
+    runtime_contract: dict[str, Any],
+) -> None:
+    """Keep the project traceability operation and nested schemas aligned."""
+    traceability_path = "/api/v1/projects/{project_id}/traceability"
+    response_fields = {"items", "total", "limit", "offset"}
+    requirement_fields = {
+        "id",
+        "record_number",
+        "title",
+        "status",
+        "priority",
+        "stories",
+    }
+    story_fields = {"id", "record_number", "title", "status", "tasks"}
+    task_fields = {"id", "title", "status"}
+
+    checked_operation = checked_contract["paths"][traceability_path]["get"]
+    assert {"200", "401", "403", "404", "422"}.issubset(
+        checked_operation["responses"]
+    )
+
+    for contract in (checked_contract, runtime_contract):
+        path_item = contract["paths"][traceability_path]
+        operation = path_item["get"]
+        assert operation["operationId"] == "getProjectTraceability"
+        assert response_reference(contract, traceability_path, "get", "200") == (
+            "#/components/schemas/ProjectTraceabilityResponse"
+        )
+
+        parameters = [
+            *path_item.get("parameters", []),
+            *operation.get("parameters", []),
+        ]
+        parameters_by_name = {}
+        for parameter in parameters:
+            if "$ref" in parameter:
+                parameter = contract["components"]["parameters"][
+                    parameter["$ref"].rsplit("/", maxsplit=1)[1]
+                ]
+            parameters_by_name[parameter["name"]] = parameter
+
+        project_id_parameter = parameters_by_name["project_id"]
+        assert project_id_parameter["in"] == "path"
+        assert project_id_parameter["required"] is True
+        assert project_id_parameter["schema"]["type"] == "string"
+        assert project_id_parameter["schema"]["format"] == "uuid"
+
+        limit_parameter = parameters_by_name["limit"]
+        assert limit_parameter["in"] == "query"
+        assert limit_parameter.get("required", False) is False
+        assert limit_parameter["schema"]["type"] == "integer"
+        assert limit_parameter["schema"]["minimum"] == 1
+        assert limit_parameter["schema"]["maximum"] == 100
+        assert limit_parameter["schema"]["default"] == 20
+
+        offset_parameter = parameters_by_name["offset"]
+        assert offset_parameter["in"] == "query"
+        assert offset_parameter.get("required", False) is False
+        assert offset_parameter["schema"]["type"] == "integer"
+        assert offset_parameter["schema"]["minimum"] == 0
+        assert offset_parameter["schema"]["default"] == 0
+
+        schemas = contract["components"]["schemas"]
+        response_schema = schemas["ProjectTraceabilityResponse"]
+        requirement_schema = schemas["TraceabilityRequirement"]
+        story_schema = schemas["TraceabilityStory"]
+        task_schema = schemas["TraceabilityTask"]
+
+        for schema, fields in (
+            (response_schema, response_fields),
+            (requirement_schema, requirement_fields),
+            (story_schema, story_fields),
+            (task_schema, task_fields),
+        ):
+            assert schema["additionalProperties"] is False
+            assert set(schema["required"]) == fields
+            assert set(schema["properties"]) == fields
+
+        response_items = response_schema["properties"]["items"]
+        assert response_items["type"] == "array"
+        assert response_items["items"]["$ref"] == (
+            "#/components/schemas/TraceabilityRequirement"
+        )
+        for field_name, constraints in (
+            ("total", {"minimum": 0}),
+            ("limit", {"minimum": 1, "maximum": 100}),
+            ("offset", {"minimum": 0}),
+        ):
+            field = response_schema["properties"][field_name]
+            assert field["type"] == "integer"
+            for constraint_name, value in constraints.items():
+                assert field[constraint_name] == value
+
+        for schema in (requirement_schema, story_schema, task_schema):
+            identifier = schema["properties"]["id"]
+            assert identifier["type"] == "string"
+            assert identifier["format"] == "uuid"
+
+        assert requirement_schema["properties"]["status"] == {
+            "$ref": "#/components/schemas/RequirementStatus"
+        }
+        assert requirement_schema["properties"]["priority"] == {
+            "$ref": "#/components/schemas/RequirementPriority"
+        }
+        stories = requirement_schema["properties"]["stories"]
+        assert stories["type"] == "array"
+        assert stories["items"]["$ref"] == (
+            "#/components/schemas/TraceabilityStory"
+        )
+        assert story_schema["properties"]["status"] == {
+            "$ref": "#/components/schemas/UserStoryStatus"
+        }
+        tasks = story_schema["properties"]["tasks"]
+        assert tasks["type"] == "array"
+        assert tasks["items"]["$ref"] == (
+            "#/components/schemas/TraceabilityTask"
+        )
+        assert task_schema["properties"]["status"] == {
+            "$ref": "#/components/schemas/TaskStatus"
+        }
+
+    # FastAPI auto-documents response models and validation, while the
+    # checked-in contract documents manually raised authorization/not-found errors.
+    assert "422" in runtime_contract["paths"][traceability_path]["get"]["responses"]
