@@ -92,5 +92,7 @@ uv run --no-sync ruff check app tests migrations/versions
   PostgreSQL target and test-only password for every run; the latest unified
   execution met those requirements and passed.
 - The unified runner intentionally excludes Docker, migrations, and deployment.
-- The workflow is not verified until GitHub Actions runs it after a push or pull
-  request; CI does not provide continuous deployment.
+- A push-triggered CI run completed successfully for commit
+  `1e4333738947f131816901b9fdb71e4fff61d4f2`. The workflow is configured for
+  pull requests targeting `main`; direct pull-request execution evidence must
+  be recorded separately. CI does not provide continuous deployment.

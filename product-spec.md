@@ -156,12 +156,16 @@ until I restore it.
 
 The implemented application uses React, TypeScript, and Vite in the frontend;
 FastAPI, SQLAlchemy, and Alembic in the backend; and PostgreSQL for persistence.
-The main Compose configuration starts PostgreSQL only. The backend and frontend
-are run locally as separate processes.
+The repository includes a full-stack Docker Compose configuration for PostgreSQL,
+the FastAPI backend, and the React frontend. Its isolated runtime has not yet
+been verified end to end.
 
 The repository has backend automated tests and recorded quality-check results.
-Frontend automated tests and CI workflows are not configured. The application
-is not presented as publicly deployed.
+Frontend automated tests and GitHub Actions CI are implemented. The
+push-triggered CI run for commit `1e4333738947f131816901b9fdb71e4fff61d4f2`
+completed successfully. CI is configured for pull requests targeting `main`,
+but pull-request execution evidence must be verified independently. Continuous
+deployment and public deployment are not implemented.
 
 ## 8. Data Relationships
 
@@ -186,9 +190,9 @@ is not presented as publicly deployed.
 
 ## 10. Current Limitations and Future Work
 
-The MVP does not currently provide public deployment evidence, CI/CD workflows,
-frontend automated tests, enterprise SSO, Jira synchronization, real-time
-collaboration, advanced capacity forecasting, or a full application Docker
-Compose topology. Future work will add frontend coverage, CI quality gates,
-deployment documentation, observability, and further validation of optional AI
-provider behavior.
+The MVP does not currently provide public deployment evidence, continuous
+deployment, enterprise SSO, Jira synchronization, real-time collaboration, or
+advanced capacity forecasting. A full application Docker Compose topology is
+implemented, but its runtime has not yet been verified. Future work includes
+capturing pull-request CI evidence, deployment documentation, observability,
+and further validation of optional AI provider behavior.

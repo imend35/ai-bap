@@ -65,24 +65,28 @@ Each issue below includes a problem statement, scope, acceptance criteria, verif
 **Dependencies:** Approved test-runner design and dependencies.<br>
 **Agent-assisted evidence:** Link actual code/test reports and CI result.
 
-## 4. Add Pull-Request CI Quality Gates
+## 4. Verify Pull-Request CI Quality Gates
 
-**Problem statement:** No GitHub Actions workflow validates pull requests.
+**Problem statement:** A GitHub Actions workflow is implemented and has
+completed successfully for a push to `main`, but direct pull-request execution
+evidence has not yet been captured.
 
-**Scope:** Add PR CI for backend tests/Ruff and frontend tests/build/lint using safe service configuration.
+**Scope:** Verify the existing PR CI workflow, which runs backend tests/Ruff
+and frontend tests/build/lint using safe service configuration.
 
 **Acceptance criteria:**
 
-- Workflow triggers on pull requests targeting `main`.
+- The existing workflow triggers on pull requests targeting `main`.
 - Backend tests and Ruff run in an isolated service environment.
-- Frontend tests, build, and lint run after the frontend suite exists.
+- Frontend tests, build, and lint run successfully in the pull-request workflow.
 - Logs do not expose credentials or connection secrets.
 - Failures are actionable and non-zero.
 
 **Verification method:** Record a real workflow-run URL and results from a test pull request or permitted dispatch.<br>
 **Rubric category:** CI/CD.<br>
 **Dependencies:** Stable local commands, frontend tests, GitHub Actions permissions.<br>
-**Agent-assisted evidence:** Link workflow file, run URL, and report after completion.
+**Agent-assisted evidence:** Link the workflow file, successful main push run
+URL, pull-request workflow run URL, and Codex report after completion.
 
 ## 5. Implement Development CD and Manual Production Deployment
 
