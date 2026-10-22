@@ -313,8 +313,10 @@ production build, and Oxlint. The backend job creates an ephemeral PostgreSQL
 applies Alembic through the guarded test wrapper, then runs Pytest and Ruff.
 It uses only synthetic CI credentials and never targets a development database.
 
-The workflow is implemented locally but requires a pushed branch or pull
-request before GitHub can provide remote execution evidence.
+Remote execution is verified for the push-triggered run on `main` and the
+pull-request-triggered run for [PR #1](https://github.com/imend35/ai-bap/pull/1).
+Both runs completed successfully. The documented PR run is available at
+<https://github.com/imend35/ai-bap/actions/runs/39826933174>.
 
 ## Security Considerations
 
@@ -336,8 +338,8 @@ request before GitHub can provide remote execution evidence.
   are not configured.
 - Oxlint has 16 retained warnings and no errors; resolving them safely needs a
   separately scoped state-management refactor with frontend regression tests.
-- The Compose stack is local-only and has not been verified as a public
-  deployment topology.
+- The full-stack Compose configuration is local-only and its runtime has not
+  yet been verified end to end.
 - The optional AI draft generator depends on an explicitly configured OpenAI
   API key and external provider availability.
 

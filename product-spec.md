@@ -163,9 +163,10 @@ been verified end to end.
 The repository has backend automated tests and recorded quality-check results.
 Frontend automated tests and GitHub Actions CI are implemented. The
 push-triggered CI run for commit `1e4333738947f131816901b9fdb71e4fff61d4f2`
-completed successfully. CI is configured for pull requests targeting `main`,
-but pull-request execution evidence must be verified independently. Continuous
-deployment and public deployment are not implemented.
+and the pull-request-triggered CI run for commit
+`d88973895dced732e6aa7f00e4da5847ed0ba3d4` both completed successfully. CI is
+configured for pull requests targeting `main`. Continuous deployment and public
+deployment are not implemented.
 
 ## 8. Data Relationships
 
@@ -194,5 +195,5 @@ The MVP does not currently provide public deployment evidence, continuous
 deployment, enterprise SSO, Jira synchronization, real-time collaboration, or
 advanced capacity forecasting. A full application Docker Compose topology is
 implemented, but its runtime has not yet been verified. Future work includes
-capturing pull-request CI evidence, deployment documentation, observability,
-and further validation of optional AI provider behavior.
+deployment documentation, observability, and further validation of optional AI
+provider behavior.

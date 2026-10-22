@@ -51,9 +51,9 @@ external AI service.
 
 Frontend automated tests are implemented. The repository includes a GitHub
 Actions CI workflow for frontend and backend validation. The push-triggered
-workflow run for commit `1e4333738947f131816901b9fdb71e4fff61d4f2` completed
-successfully. The workflow is configured for pull requests targeting `main`,
-but pull-request execution evidence must be recorded separately. Public
+workflow run for commit `1e4333738947f131816901b9fdb71e4fff61d4f2` and the
+pull-request-triggered workflow run for commit
+`d88973895dced732e6aa7f00e4da5847ed0ba3d4` completed successfully. Public
 deployment and OpenTelemetry instrumentation are not currently evidenced by
 this repository.
 
@@ -163,9 +163,9 @@ The local Compose runtime starts the full application with
 public deployment or cloud topology is claimed. The repository includes a
 GitHub Actions CI workflow for frontend and backend validation. The
 push-triggered workflow run for commit `1e4333738947f131816901b9fdb71e4fff61d4f2`
-completed successfully. The workflow is configured for pull requests targeting
-`main`, but pull-request execution evidence must be recorded separately. The
-stack is a local reproducibility topology, not deployment evidence.
+and the pull-request-triggered workflow run for commit
+`d88973895dced732e6aa7f00e4da5847ed0ba3d4` completed successfully. The stack
+is a local reproducibility topology, not deployment evidence.
 
 ## 11. Testing and Quality Position
 
@@ -191,7 +191,7 @@ mocked API responses, and the latest documented unified run passed 515 tests.
 ## 13. Future Improvements
 
 - Expand frontend component and workflow coverage.
-- Capture pull-request CI evidence and add deployment documentation.
+- Add deployment documentation and retain CI evidence with release records.
 - Verify the isolated full-stack Compose runtime.
 - Refactor frontend loading state with regression tests to address retained
   Oxlint warnings.

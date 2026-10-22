@@ -119,8 +119,8 @@ content. I do not treat AI output as automatically approved work.
 
 Frontend automated tests and GitHub Actions CI are implemented. The
 push-triggered CI run for commit `1e4333738947f131816901b9fdb71e4fff61d4f2`
-completed successfully. CI is configured for pull requests targeting `main`,
-but direct pull-request execution evidence must be recorded separately. The
+and the pull-request-triggered CI run for commit
+`d88973895dced732e6aa7f00e4da5847ed0ba3d4` completed successfully. The
 full-stack Compose configuration exists, but its runtime has not yet been
 verified. Continuous deployment and public deployment are not implemented.
 
@@ -141,7 +141,7 @@ documentation, and remaining limitations are reviewed together.
 | Test data reaches development data | The isolated PostgreSQL test procedure validates a separate database target before tests run. |
 | Secrets leak into source control | `.env` and common secret files are ignored; documentation uses placeholders only. |
 | External AI availability | Draft generation is optional and returns a controlled error when no API key is configured. |
-| Incomplete delivery automation | CI is verified for a push run; pull-request execution evidence, continuous deployment, public deployment, and full-stack Compose runtime verification remain limitations. |
+| Incomplete delivery automation | CI is verified for push and pull-request runs; continuous deployment, public deployment, and full-stack Compose runtime verification remain limitations. |
 
 ## 11. Deliverables
 
@@ -155,6 +155,5 @@ completed deliverables.
 ## 12. Next Step
 
 My next priority is final submission preparation: review the complete working
-tree, retain only intended artifacts, capture pull-request CI evidence, verify
-the isolated full-stack Compose runtime, and validate the documented setup from
-a clean environment.
+tree, retain only intended artifacts, verify the isolated full-stack Compose
+runtime, and validate the documented setup from a clean environment.
