@@ -31,6 +31,9 @@ Thumbs.db
 tmp/
 temp/
 
+# Local diagnostic artifacts
+/backend/diagnostic_8_10_32.txt
+
 # Local frontend backups
 /frontend/backups/
 

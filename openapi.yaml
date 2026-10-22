@@ -977,7 +977,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/TaskResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -1007,7 +1007,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/TaskResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -1031,7 +1031,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/TaskResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -2277,7 +2277,7 @@ components:
         status:
           $ref: "#/components/schemas/TaskStatus"
 
-    Task:
+    TaskResponse:
       type: object
       additionalProperties: false
       required:
@@ -2326,7 +2326,7 @@ components:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/Task"
+            $ref: "#/components/schemas/TaskResponse"
         total:
           type: integer
           minimum: 0

@@ -3,7 +3,6 @@
 
 import json
 
-
 SYSTEM_PROMPT = """
 You are a senior business analyst specializing in Agile software development.
 

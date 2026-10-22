@@ -5,6 +5,9 @@ from typing import Any
 
 import pytest
 import yaml
+from pydantic import ValidationError
+
+from app.schemas.task import TaskUpdate
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 OPENAPI_PATH = BACKEND_ROOT.parent / "openapi.yaml"
@@ -366,16 +369,16 @@ def test_task_sprint_assignment_schemas_match_runtime(
             == "#/components/schemas/TaskUpdate"
         )
         assert response_reference(contract, "/api/v1/tasks", "post", "201") == (
-            "#/components/schemas/Task"
+            "#/components/schemas/TaskResponse"
         )
         assert response_reference(contract, "/api/v1/tasks/{task_id}", "patch", "200") == (
-            "#/components/schemas/Task"
+            "#/components/schemas/TaskResponse"
         )
 
         schemas = contract["components"]["schemas"]
         task_create = schemas["TaskCreate"]
         task_update = schemas["TaskUpdate"]
-        task_response = schemas["Task"]
+        task_response = schemas["TaskResponse"]
 
         for task_schema in (task_create, task_update, task_response):
             assert task_schema["properties"]["sprint_id"]["anyOf"] == expected_sprint_id_schema
@@ -384,13 +387,23 @@ def test_task_sprint_assignment_schemas_match_runtime(
         assert "sprint_id" not in task_update.get("required", [])
         assert "sprint_id" in task_response["required"]
         assert task_update["minProperties"] == 1
-        assert task_update["properties"]["status"] == {
-            "$ref": "#/components/schemas/TaskStatus"
-        }
-
     documented_update = checked_contract["components"]["schemas"]["TaskUpdate"]
+    runtime_update = runtime_contract["components"]["schemas"]["TaskUpdate"]
     assert "Omit" in documented_update["properties"]["sprint_id"]["description"]
     assert "null" in documented_update["properties"]["sprint_id"]["description"]
+    assert documented_update["properties"]["status"] == {
+        "$ref": "#/components/schemas/TaskStatus"
+    }
+    assert runtime_update["properties"]["status"]["anyOf"] == [
+        {"$ref": "#/components/schemas/TaskStatus"},
+        {"type": "null"},
+    ]
+
+    # Pydantic publishes the optional PATCH field as nullable, but the model
+    # validator rejects an explicitly supplied null; the checked-in contract
+    # correctly documents the accepted API payload rather than that artifact.
+    with pytest.raises(ValidationError, match="status cannot be null"):
+        TaskUpdate.model_validate({"status": None})
 
 
 def test_project_dashboard_contract_matches_runtime(
@@ -473,6 +486,32 @@ def test_project_dashboard_contract_matches_runtime(
         for field in task_status_counts["properties"].values():
             assert field["type"] == "integer"
             assert field["minimum"] == 0
+
+
+def test_project_archive_and_restore_contracts_match_runtime(
+    checked_contract: dict[str, Any],
+    runtime_contract: dict[str, Any],
+) -> None:
+    """I keep project archive lifecycle operations contract-aligned."""
+    for path, operation_id in (
+        ("/api/v1/projects/{project_id}/archive", "archiveProject"),
+        ("/api/v1/projects/{project_id}/restore", "restoreProject"),
+    ):
+        checked_operation = checked_contract["paths"][path]["post"]
+        runtime_operation = runtime_contract["paths"][path]["post"]
+        assert checked_operation["operationId"] == operation_id
+        assert runtime_operation["operationId"] == operation_id
+        assert response_reference(checked_contract, path, "post", "200") == (
+            "#/components/schemas/ProjectResponse"
+        )
+        assert response_reference(runtime_contract, path, "post", "200") == (
+            "#/components/schemas/ProjectResponse"
+        )
+        assert effective_security(checked_contract, checked_operation) == JWT_SECURITY
+        assert runtime_operation["security"] == JWT_SECURITY
+        assert {"401", "403", "404", "422"}.issubset(
+            checked_operation["responses"]
+        )
 
 
 def test_project_traceability_contract_matches_runtime(

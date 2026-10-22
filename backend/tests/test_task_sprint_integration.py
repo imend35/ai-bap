@@ -13,7 +13,6 @@ from app.models import Project, Requirement, Sprint, UserStory
 from app.role_permissions import ADMIN
 from app.security import get_current_user
 
-
 TASKS_URL = "/api/v1/tasks"
 
 

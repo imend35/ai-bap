@@ -13,7 +13,6 @@ from app.main import app
 from app.models import Project, Requirement, UserStory
 from app.models.user import User
 
-
 client = TestClient(app)
 
 
@@ -188,32 +187,31 @@ def test_user_story_can_be_rejected_after_review():
 
     with prepare_story(role="reviewer") as (
         _project_id, _requirement_id, story_id, user_id
-    ):
-        with prepare_editor() as editor_id:
-            # I use a business analyst to submit the story for review.
-            review_response = client.patch(
-                f"/api/v1/user-stories/{story_id}",
-                json={"status": "in_review"},
-                headers=get_jwt_headers(editor_id),
-            )
+    ), prepare_editor() as editor_id:
+        # I use a business analyst to submit the story for review.
+        review_response = client.patch(
+            f"/api/v1/user-stories/{story_id}",
+            json={"status": "in_review"},
+            headers=get_jwt_headers(editor_id),
+        )
 
-            assert review_response.status_code == status.HTTP_200_OK
-            assert review_response.json()["status"] == "in_review"
+        assert review_response.status_code == status.HTTP_200_OK
+        assert review_response.json()["status"] == "in_review"
 
-            # I reject the reviewed story using my reviewer JWT.
-            rejection_response = client.post(
-                f"/api/v1/user-stories/{story_id}/reject",
-                headers=get_jwt_headers(user_id),
-            )
+        # I reject the reviewed story using my reviewer JWT.
+        rejection_response = client.post(
+            f"/api/v1/user-stories/{story_id}/reject",
+            headers=get_jwt_headers(user_id),
+        )
 
-            assert rejection_response.status_code == status.HTTP_200_OK
-            assert rejection_response.json()["status"] == "rejected"
+        assert rejection_response.status_code == status.HTTP_200_OK
+        assert rejection_response.json()["status"] == "rejected"
 
-            # I verify that PostgreSQL persisted my rejection.
-            with SessionLocal() as db:
-                saved_story = db.get(UserStory, story_id)
-                assert saved_story is not None
-                assert saved_story.status == "rejected"
+        # I verify that PostgreSQL persisted my rejection.
+        with SessionLocal() as db:
+            saved_story = db.get(UserStory, story_id)
+            assert saved_story is not None
+            assert saved_story.status == "rejected"
 
 
 def test_rejected_user_story_can_be_revised_and_resubmitted():

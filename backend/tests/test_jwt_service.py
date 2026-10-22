@@ -1,7 +1,7 @@
 
 """I test JWT access token security for AI BAP."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import jwt
@@ -41,8 +41,8 @@ def test_expired_access_token_is_rejected():
 
     expired_payload = {
         "sub": str(user_id),
-        "iat": datetime.now(timezone.utc) - timedelta(hours=2),
-        "exp": datetime.now(timezone.utc) - timedelta(hours=1),
+        "iat": datetime.now(UTC) - timedelta(hours=2),
+        "exp": datetime.now(UTC) - timedelta(hours=1),
         "type": "access",
     }
 
@@ -62,8 +62,8 @@ def test_wrong_token_type_is_rejected():
 
     payload = {
         "sub": str(user_id),
-        "iat": datetime.now(timezone.utc),
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
+        "iat": datetime.now(UTC),
+        "exp": datetime.now(UTC) + timedelta(minutes=30),
         "type": "refresh",
     }
 
@@ -82,8 +82,8 @@ def test_invalid_user_id_is_rejected():
 
     payload = {
         "sub": "invalid-user-id",
-        "iat": datetime.now(timezone.utc),
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
+        "iat": datetime.now(UTC),
+        "exp": datetime.now(UTC) + timedelta(minutes=30),
         "type": "access",
     }
 
@@ -102,7 +102,7 @@ def test_missing_required_claim_is_rejected():
 
     payload = {
         "sub": str(uuid4()),
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
+        "exp": datetime.now(UTC) + timedelta(minutes=30),
         "type": "access",
     }
 

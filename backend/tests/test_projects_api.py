@@ -2,13 +2,14 @@
 """I test project API operations and role-based authorization."""
 
 from contextlib import contextmanager
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.database import SessionLocal
 from app.main import app
@@ -19,6 +20,9 @@ from app.security import get_current_user
 
 client = TestClient(app)
 BASE_URL = "/api/v1/projects"
+ARCHIVED_PROJECT_READ_ONLY_DETAIL = (
+    "Archived projects are read-only. Restore the project before making changes."
+)
 
 
 @contextmanager
@@ -79,6 +83,75 @@ def temporary_project(name, description, project_status="planned"):
         # I remove the temporary project from PostgreSQL.
         with SessionLocal() as db:
             project = db.get(Project, project_id)
+            if project is not None:
+                db.delete(project)
+                db.commit()
+
+
+@contextmanager
+def temporary_project_workflow():
+    """I provide linked records for project archive-state API tests."""
+    with SessionLocal() as db:
+        project = Project(
+            name="Archive Workflow Project",
+            description="Temporary project for archive-state verification.",
+            status="active",
+        )
+        db.add(project)
+        db.flush()
+        requirement = Requirement(
+            project_id=project.id,
+            title="Archive Workflow Requirement",
+            description="I support archive-state mutation tests.",
+            status="approved",
+        )
+        db.add(requirement)
+        db.flush()
+        review_story = UserStory(
+            requirement_id=requirement.id,
+            title="Story awaiting review",
+            description="I exercise approval and rejection protection.",
+            acceptance_criteria=[],
+            status="in_review",
+        )
+        approved_story = UserStory(
+            requirement_id=requirement.id,
+            title="Approved delivery story",
+            description="I exercise task mutation protection.",
+            acceptance_criteria=[],
+            status="approved",
+        )
+        db.add_all([review_story, approved_story])
+        db.flush()
+        task = Task(
+            story_id=approved_story.id,
+            title="Archive Workflow Task",
+            description="I exercise task update protection.",
+            status="todo",
+        )
+        sprint = Sprint(
+            project_id=project.id,
+            name="Archive Workflow Sprint",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 14),
+            status="active",
+        )
+        db.add_all([task, sprint])
+        db.commit()
+        identifiers = {
+            "project_id": project.id,
+            "requirement_id": requirement.id,
+            "review_story_id": review_story.id,
+            "approved_story_id": approved_story.id,
+            "task_id": task.id,
+            "sprint_id": sprint.id,
+        }
+
+    try:
+        yield identifiers
+    finally:
+        with SessionLocal() as db:
+            project = db.get(Project, identifiers["project_id"])
             if project is not None:
                 db.delete(project)
                 db.commit()
@@ -241,8 +314,10 @@ def test_get_project_without_token():
 
 def test_get_project_dashboard_aggregates_project_scoped_records():
     """I return stored-record dashboard counts without including another project."""
-    with temporary_project("Dashboard Project", "Dashboard target") as project_id:
-        with temporary_project("Other Project", "Dashboard isolation") as other_project_id:
+    with (
+        temporary_project("Dashboard Project", "Dashboard target") as project_id,
+        temporary_project("Other Project", "Dashboard isolation") as other_project_id,
+    ):
             with SessionLocal() as db:
                 requirement = Requirement(
                     project_id=project_id,
@@ -391,9 +466,11 @@ def test_get_project_dashboard_aggregates_project_scoped_records():
 
 def test_get_project_dashboard_returns_zero_counts_for_empty_project():
     """I return every task-status key with zero counts for an empty project."""
-    with temporary_project("Empty Dashboard Project", "No related records") as project_id:
-        with authenticated_as() as api:
-            response = api.get(f"{BASE_URL}/{project_id}/dashboard")
+    with (
+        temporary_project("Empty Dashboard Project", "No related records") as project_id,
+        authenticated_as() as api,
+    ):
+        response = api.get(f"{BASE_URL}/{project_id}/dashboard")
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == {
@@ -429,17 +506,21 @@ def test_get_project_dashboard_without_token():
 @pytest.mark.parametrize("role", [ADMIN, BUSINESS_ANALYST, REVIEWER])
 def test_all_roles_can_get_project_dashboard(role):
     """I allow every supported role to read a project dashboard."""
-    with temporary_project("Dashboard Role Test", "Role access") as project_id:
-        with authenticated_as(role) as api:
-            response = api.get(f"{BASE_URL}/{project_id}/dashboard")
+    with (
+        temporary_project("Dashboard Role Test", "Role access") as project_id,
+        authenticated_as(role) as api,
+    ):
+        response = api.get(f"{BASE_URL}/{project_id}/dashboard")
 
     assert response.status_code == status.HTTP_200_OK
 
 
 def test_get_project_traceability_returns_complete_project_scoped_hierarchy():
     """I return persisted Requirement, Story, and Task links without leakage."""
-    with temporary_project("Traceability Project", "Traceability target") as project_id:
-        with temporary_project("Other Project", "Traceability isolation") as other_project_id:
+    with (
+        temporary_project("Traceability Project", "Traceability target") as project_id,
+        temporary_project("Other Project", "Traceability isolation") as other_project_id,
+    ):
             with SessionLocal() as db:
                 requirement_with_stories = Requirement(
                     id=UUID("00000000-0000-0000-0000-000000000003"),
@@ -448,7 +529,7 @@ def test_get_project_traceability_returns_complete_project_scoped_hierarchy():
                     description="I have linked stories.",
                     priority="high",
                     status="approved",
-                    created_at=datetime(2026, 3, 3, tzinfo=timezone.utc),
+                    created_at=datetime(2026, 3, 3, tzinfo=UTC),
                 )
                 requirement_without_stories = Requirement(
                     id=UUID("00000000-0000-0000-0000-000000000002"),
@@ -457,7 +538,7 @@ def test_get_project_traceability_returns_complete_project_scoped_hierarchy():
                     description="I remain visible without children.",
                     priority="low",
                     status="draft",
-                    created_at=datetime(2026, 3, 2, tzinfo=timezone.utc),
+                    created_at=datetime(2026, 3, 2, tzinfo=UTC),
                 )
                 other_requirement = Requirement(
                     project_id=other_project_id,
@@ -482,7 +563,7 @@ def test_get_project_traceability_returns_complete_project_scoped_hierarchy():
                     description="I remain included.",
                     acceptance_criteria=[],
                     status="draft",
-                    created_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+                    created_at=datetime(2026, 3, 1, tzinfo=UTC),
                 )
                 approved_story = UserStory(
                     id=UUID("00000000-0000-0000-0000-000000000013"),
@@ -491,7 +572,7 @@ def test_get_project_traceability_returns_complete_project_scoped_hierarchy():
                     description="I include every task status.",
                     acceptance_criteria=[],
                     status="approved",
-                    created_at=datetime(2026, 3, 3, tzinfo=timezone.utc),
+                    created_at=datetime(2026, 3, 3, tzinfo=UTC),
                 )
                 rejected_story_without_tasks = UserStory(
                     id=UUID("00000000-0000-0000-0000-000000000012"),
@@ -500,7 +581,7 @@ def test_get_project_traceability_returns_complete_project_scoped_hierarchy():
                     description="I remain included without tasks.",
                     acceptance_criteria=[],
                     status="rejected",
-                    created_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+                    created_at=datetime(2026, 3, 1, tzinfo=UTC),
                 )
                 other_story = UserStory(
                     requirement_id=other_requirement.id,
@@ -526,35 +607,35 @@ def test_get_project_traceability_returns_complete_project_scoped_hierarchy():
                             story_id=draft_story.id,
                             title="Draft story task",
                             status="todo",
-                            created_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+                            created_at=datetime(2026, 3, 1, tzinfo=UTC),
                         ),
                         Task(
                             id=UUID("00000000-0000-0000-0000-000000000022"),
                             story_id=approved_story.id,
                             title="In progress task",
                             status="in_progress",
-                            created_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+                            created_at=datetime(2026, 3, 1, tzinfo=UTC),
                         ),
                         Task(
                             id=UUID("00000000-0000-0000-0000-000000000024"),
                             story_id=approved_story.id,
                             title="In review task",
                             status="in_review",
-                            created_at=datetime(2026, 3, 3, tzinfo=timezone.utc),
+                            created_at=datetime(2026, 3, 3, tzinfo=UTC),
                         ),
                         Task(
                             id=UUID("00000000-0000-0000-0000-000000000025"),
                             story_id=approved_story.id,
                             title="To do tied task",
                             status="todo",
-                            created_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+                            created_at=datetime(2026, 3, 1, tzinfo=UTC),
                         ),
                         Task(
                             id=UUID("00000000-0000-0000-0000-000000000023"),
                             story_id=approved_story.id,
                             title="Done task",
                             status="done",
-                            created_at=datetime(2026, 3, 2, tzinfo=timezone.utc),
+                            created_at=datetime(2026, 3, 2, tzinfo=UTC),
                         ),
                         Task(
                             story_id=other_story.id,
@@ -656,21 +737,21 @@ def test_get_project_traceability_paginates_roots_and_handles_empty_results():
                 project_id=project_id,
                 title="Older tied requirement",
                 description="I test the ID tie-breaker.",
-                created_at=datetime(2026, 4, 1, tzinfo=timezone.utc),
+                created_at=datetime(2026, 4, 1, tzinfo=UTC),
             )
             newer_tied_requirement = Requirement(
                 id=UUID("00000000-0000-0000-0000-000000000102"),
                 project_id=project_id,
                 title="Newer tied requirement",
                 description="I win the ID tie-breaker.",
-                created_at=datetime(2026, 4, 1, tzinfo=timezone.utc),
+                created_at=datetime(2026, 4, 1, tzinfo=UTC),
             )
             latest_requirement = Requirement(
                 id=UUID("00000000-0000-0000-0000-000000000103"),
                 project_id=project_id,
                 title="Latest requirement",
                 description="I win on created_at.",
-                created_at=datetime(2026, 4, 2, tzinfo=timezone.utc),
+                created_at=datetime(2026, 4, 2, tzinfo=UTC),
             )
             db.add_all(
                 [
@@ -722,9 +803,11 @@ def test_get_project_traceability_paginates_roots_and_handles_empty_results():
 
 def test_get_project_traceability_returns_empty_page_for_empty_project():
     """I return an empty root collection for an existing project without requirements."""
-    with temporary_project("Empty Traceability", "No requirements") as project_id:
-        with authenticated_as() as api:
-            response = api.get(f"{BASE_URL}/{project_id}/traceability")
+    with (
+        temporary_project("Empty Traceability", "No requirements") as project_id,
+        authenticated_as() as api,
+    ):
+        response = api.get(f"{BASE_URL}/{project_id}/traceability")
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == {
@@ -783,9 +866,11 @@ def test_get_project_traceability_without_token():
 @pytest.mark.parametrize("role", [ADMIN, BUSINESS_ANALYST, REVIEWER])
 def test_all_roles_can_get_project_traceability(role):
     """I allow every supported role to read project traceability."""
-    with temporary_project("Traceability Role Test", "Role access") as project_id:
-        with authenticated_as(role) as api:
-            response = api.get(f"{BASE_URL}/{project_id}/traceability")
+    with (
+        temporary_project("Traceability Role Test", "Role access") as project_id,
+        authenticated_as(role) as api,
+    ):
+        response = api.get(f"{BASE_URL}/{project_id}/traceability")
 
     assert response.status_code == status.HTTP_200_OK
 
@@ -911,3 +996,251 @@ def test_reviewer_cannot_update_project():
         )
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_admin_can_archive_and_restore_a_project_idempotently():
+    """I preserve project state while recording and clearing archive metadata."""
+    with temporary_project_workflow() as identifiers:
+        project_id = identifiers["project_id"]
+        with authenticated_as(ADMIN) as api:
+            archived = api.post(f"{BASE_URL}/{project_id}/archive")
+            repeated_archive = api.post(f"{BASE_URL}/{project_id}/archive")
+
+            assert archived.status_code == status.HTTP_200_OK
+            archived_data = archived.json()
+            assert archived_data["status"] == "active"
+            assert archived_data["archived_at"] is not None
+            assert archived_data["archived_by"] is not None
+            assert repeated_archive.status_code == status.HTTP_200_OK
+            assert repeated_archive.json()["archived_at"] == archived_data["archived_at"]
+            assert repeated_archive.json()["archived_by"] == archived_data["archived_by"]
+
+            with SessionLocal() as db:
+                project = db.get(Project, project_id)
+                requirement = db.get(Requirement, identifiers["requirement_id"])
+                story = db.get(UserStory, identifiers["review_story_id"])
+                task = db.get(Task, identifiers["task_id"])
+                sprint = db.get(Sprint, identifiers["sprint_id"])
+                assert project is not None
+                assert project.archived_at is not None
+                assert project.archived_by_id is not None
+                assert project.status == "active"
+                assert requirement is not None and requirement.status == "approved"
+                assert story is not None and story.status == "in_review"
+                assert task is not None and task.status == "todo"
+                assert sprint is not None and sprint.status == "active"
+
+            restored = api.post(f"{BASE_URL}/{project_id}/restore")
+            repeated_restore = api.post(f"{BASE_URL}/{project_id}/restore")
+
+        assert restored.status_code == status.HTTP_200_OK
+        assert restored.json()["archived_at"] is None
+        assert restored.json()["archived_by"] is None
+        assert repeated_restore.status_code == status.HTTP_200_OK
+        assert repeated_restore.json()["archived_at"] is None
+        assert repeated_restore.json()["archived_by"] is None
+
+        with SessionLocal() as db:
+            project = db.get(Project, project_id)
+            assert project is not None
+            assert project.archived_at is None
+            assert project.archived_by_id is None
+            assert project.status == "active"
+
+
+@pytest.mark.parametrize("action", ["archive", "restore"])
+def test_project_archive_endpoints_enforce_authorization_and_request_validation(action):
+    """I retain role precedence and standard errors for archive operations."""
+    with temporary_project_workflow() as identifiers:
+        project_id = identifiers["project_id"]
+        with authenticated_as(BUSINESS_ANALYST) as api:
+            forbidden = api.post(f"{BASE_URL}/{project_id}/{action}")
+        unauthenticated = client.post(f"{BASE_URL}/{project_id}/{action}")
+        with authenticated_as(ADMIN) as api:
+            invalid_identifier = api.post(f"{BASE_URL}/not-a-uuid/{action}")
+            missing_project = api.post(f"{BASE_URL}/{uuid4()}/{action}")
+
+    assert forbidden.status_code == status.HTTP_403_FORBIDDEN
+    assert unauthenticated.status_code == status.HTTP_401_UNAUTHORIZED
+    assert invalid_identifier.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+    assert missing_project.status_code == status.HTTP_404_NOT_FOUND
+    assert missing_project.json()["detail"] == "Project not found."
+
+
+def test_archived_project_reads_remain_available_and_lists_are_archive_aware():
+    """I separate active and archived lists while retaining archived reads."""
+    with temporary_project_workflow() as identifiers:
+        project_id = identifiers["project_id"]
+        with temporary_project(
+            "Active Archive-Filter Project",
+            "Temporary active project for list filtering.",
+            project_status="active",
+        ) as active_project_id:
+            with authenticated_as(ADMIN) as api:
+                archive_response = api.post(f"{BASE_URL}/{project_id}/archive")
+                active_list = api.get(f"{BASE_URL}?limit=100&offset=0")
+                archived_list = api.get(
+                    f"{BASE_URL}?archived=true&limit=1&offset=0"
+                )
+                detail = api.get(f"{BASE_URL}/{project_id}")
+                dashboard = api.get(f"{BASE_URL}/{project_id}/dashboard")
+                traceability = api.get(f"{BASE_URL}/{project_id}/traceability")
+                with SessionLocal() as db:
+                    active_total = db.scalar(
+                        select(func.count())
+                        .select_from(Project)
+                        .where(Project.archived_at.is_(None))
+                    )
+                    archived_total = db.scalar(
+                        select(func.count())
+                        .select_from(Project)
+                        .where(Project.archived_at.is_not(None))
+                    )
+                restore_response = api.post(f"{BASE_URL}/{project_id}/restore")
+
+            assert archive_response.status_code == status.HTTP_200_OK
+            assert active_list.status_code == status.HTTP_200_OK
+            assert archived_list.status_code == status.HTTP_200_OK
+            assert detail.status_code == status.HTTP_200_OK
+            assert dashboard.status_code == status.HTTP_200_OK
+            assert traceability.status_code == status.HTTP_200_OK
+            assert restore_response.status_code == status.HTTP_200_OK
+            active_data = active_list.json()
+            archived_data = archived_list.json()
+            active_ids = {item["id"] for item in active_data["items"]}
+            archived_ids = {item["id"] for item in archived_data["items"]}
+
+            assert str(active_project_id) in active_ids
+            assert str(project_id) not in active_ids
+            assert str(project_id) in archived_ids
+            assert active_data["total"] == active_total
+            assert archived_data["total"] == archived_total
+            assert archived_data["limit"] == 1
+            assert archived_data["offset"] == 0
+            assert len(archived_data["items"]) <= 1
+            assert detail.json()["archived_at"] is not None
+
+
+@pytest.mark.parametrize(
+    ("method", "path_key", "payload"),
+    [
+        ("patch", "project", {"name": "Blocked project update"}),
+        (
+            "post",
+            "requirements",
+            {"title": "Blocked requirement", "description": "Blocked."},
+        ),
+        ("patch", "requirement", {"title": "Blocked requirement update"}),
+        (
+            "post",
+            "user_stories",
+            {
+                "title": "Blocked user story",
+                "description": "Blocked.",
+                "acceptance_criteria": [],
+            },
+        ),
+        ("patch", "review_story", {"title": "Blocked story update"}),
+        ("post", "tasks", {"title": "Blocked task", "description": "Blocked."}),
+        ("patch", "task", {"title": "Blocked task update"}),
+        (
+            "post",
+            "sprints",
+            {
+                "name": "Blocked sprint",
+                "start_date": "2026-02-01",
+                "end_date": "2026-02-14",
+            },
+        ),
+        ("patch", "sprint", {"name": "Blocked sprint update"}),
+        ("post", "approve", None),
+        ("post", "reject", None),
+    ],
+)
+def test_archived_project_rejects_persisting_mutations(method, path_key, payload):
+    """I reject each protected mutation before it can change archived work."""
+    with temporary_project_workflow() as identifiers:
+        project_id = identifiers["project_id"]
+        paths = {
+            "project": f"{BASE_URL}/{project_id}",
+            "requirements": "/api/v1/requirements",
+            "requirement": (
+                f"/api/v1/requirements/{identifiers['requirement_id']}"
+            ),
+            "user_stories": "/api/v1/user-stories",
+            "review_story": (
+                f"/api/v1/user-stories/{identifiers['review_story_id']}"
+            ),
+            "tasks": "/api/v1/tasks",
+            "task": f"/api/v1/tasks/{identifiers['task_id']}",
+            "sprints": "/api/v1/sprints",
+            "sprint": f"/api/v1/sprints/{identifiers['sprint_id']}",
+            "approve": (
+                f"/api/v1/user-stories/{identifiers['review_story_id']}/approve"
+            ),
+            "reject": (
+                f"/api/v1/user-stories/{identifiers['review_story_id']}/reject"
+            ),
+        }
+        request_payload = dict(payload) if payload is not None else None
+        if path_key == "requirements":
+            request_payload["project_id"] = str(project_id)
+        elif path_key == "user_stories":
+            request_payload["requirement_id"] = str(identifiers["requirement_id"])
+        elif path_key == "tasks":
+            request_payload["story_id"] = str(identifiers["approved_story_id"])
+        elif path_key == "sprints":
+            request_payload["project_id"] = str(project_id)
+
+        with authenticated_as(ADMIN) as api:
+            archive_response = api.post(f"{BASE_URL}/{project_id}/archive")
+            response = api.request(method, paths[path_key], json=request_payload)
+            restore_response = api.post(f"{BASE_URL}/{project_id}/restore")
+
+    assert archive_response.status_code == status.HTTP_200_OK
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json()["detail"] == ARCHIVED_PROJECT_READ_ONLY_DETAIL
+    assert restore_response.status_code == status.HTTP_200_OK
+
+
+def test_archived_project_rejects_ai_generation_before_provider_invocation():
+    """I block AI generation for archived work without calling the provider."""
+    with temporary_project_workflow() as identifiers:
+        project_id = identifiers["project_id"]
+        with authenticated_as(ADMIN) as api:
+            archive_response = api.post(f"{BASE_URL}/{project_id}/archive")
+            with patch("app.routers.user_stories.generate_user_story") as generator:
+                response = api.post(
+                    "/api/v1/user-stories/generate",
+                    json={"requirement_id": str(identifiers["requirement_id"])},
+                )
+            restore_response = api.post(f"{BASE_URL}/{project_id}/restore")
+
+    assert archive_response.status_code == status.HTTP_200_OK
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json()["detail"] == ARCHIVED_PROJECT_READ_ONLY_DETAIL
+    generator.assert_not_called()
+    assert restore_response.status_code == status.HTTP_200_OK
+
+
+def test_restore_reenables_previously_blocked_project_updates():
+    """I allow project mutation again only after an administrator restores it."""
+    with temporary_project_workflow() as identifiers:
+        project_id = identifiers["project_id"]
+        with authenticated_as(ADMIN) as api:
+            archive_response = api.post(f"{BASE_URL}/{project_id}/archive")
+            blocked_update = api.patch(
+                f"{BASE_URL}/{project_id}",
+                json={"name": "Restored project name"},
+            )
+            restore_response = api.post(f"{BASE_URL}/{project_id}/restore")
+            allowed_update = api.patch(
+                f"{BASE_URL}/{project_id}",
+                json={"name": "Restored project name"},
+            )
+
+    assert archive_response.status_code == status.HTTP_200_OK
+    assert blocked_update.status_code == status.HTTP_409_CONFLICT
+    assert restore_response.status_code == status.HTTP_200_OK
+    assert allowed_update.status_code == status.HTTP_200_OK
+    assert allowed_update.json()["name"] == "Restored project name"

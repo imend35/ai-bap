@@ -8,7 +8,6 @@ from fastapi import Depends, HTTPException, status
 from app.models.user import User
 from app.security import get_current_user
 
-
 ADMIN = "admin"
 BUSINESS_ANALYST = "business_analyst"
 REVIEWER = "reviewer"

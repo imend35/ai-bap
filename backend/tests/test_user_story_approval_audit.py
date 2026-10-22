@@ -8,7 +8,6 @@ from sqlalchemy import select
 from app.database import SessionLocal
 from app.models import UserStoryApprovalAudit
 from app.models.user import User
-
 from tests.test_user_story_approval_api import (
     client,
     get_jwt_headers,
@@ -70,42 +69,41 @@ def test_rejection_persists_audit_identity_snapshots():
         _requirement_id,
         story_id,
         user_id,
-    ):
-        with prepare_editor() as editor_id:
-            # I use a business analyst to submit the story for review.
-            review_response = client.patch(
-                f"/api/v1/user-stories/{story_id}",
-                json={"status": "in_review"},
-                headers=get_jwt_headers(editor_id),
-            )
-            assert review_response.status_code == 200
+    ), prepare_editor() as editor_id:
+        # I use a business analyst to submit the story for review.
+        review_response = client.patch(
+            f"/api/v1/user-stories/{story_id}",
+            json={"status": "in_review"},
+            headers=get_jwt_headers(editor_id),
+        )
+        assert review_response.status_code == 200
 
-            # I reject the story using the reviewer's own JWT.
-            rejection_response = client.post(
-                f"/api/v1/user-stories/{story_id}/reject",
-                headers=get_jwt_headers(user_id),
-            )
-            assert rejection_response.status_code == 200
+        # I reject the story using the reviewer's own JWT.
+        rejection_response = client.post(
+            f"/api/v1/user-stories/{story_id}/reject",
+            headers=get_jwt_headers(user_id),
+        )
+        assert rejection_response.status_code == 200
 
-            # I verify the reviewer identity was saved in the audit.
-            with SessionLocal() as db:
-                audit = db.scalar(
-                    select(UserStoryApprovalAudit)
-                    .where(
-                        UserStoryApprovalAudit.user_story_id_snapshot == story_id
-                    )
-                    .where(
-                        UserStoryApprovalAudit.actor_id_snapshot == user_id
-                    )
-                    .where(UserStoryApprovalAudit.action == "rejected")
-                    .order_by(UserStoryApprovalAudit.created_at.desc())
+        # I verify the reviewer identity was saved in the audit.
+        with SessionLocal() as db:
+            audit = db.scalar(
+                select(UserStoryApprovalAudit)
+                .where(
+                    UserStoryApprovalAudit.user_story_id_snapshot == story_id
                 )
+                .where(
+                    UserStoryApprovalAudit.actor_id_snapshot == user_id
+                )
+                .where(UserStoryApprovalAudit.action == "rejected")
+                .order_by(UserStoryApprovalAudit.created_at.desc())
+            )
 
-                assert audit is not None
-                assert audit.user_story_id_snapshot == story_id
-                assert audit.actor_id_snapshot == user_id
-                assert audit.previous_status == "in_review"
-                assert audit.new_status == "rejected"
+            assert audit is not None
+            assert audit.user_story_id_snapshot == story_id
+            assert audit.actor_id_snapshot == user_id
+            assert audit.previous_status == "in_review"
+            assert audit.new_status == "rejected"
 
 
 def test_audit_snapshots_survive_user_and_story_deletion():
@@ -252,22 +250,21 @@ def test_audit_history_survives_story_and_actor_deletion():
             _requirement_id,
             story_id,
             actor_id,
-        ):
-            with prepare_editor() as editor_id:
-                # I submit the story using a business analyst JWT.
-                review_response = client.patch(
-                    f"/api/v1/user-stories/{story_id}",
-                    json={"status": "in_review"},
-                    headers=get_jwt_headers(editor_id),
-                )
-                assert review_response.status_code == 200
+        ), prepare_editor() as editor_id:
+            # I submit the story using a business analyst JWT.
+            review_response = client.patch(
+                f"/api/v1/user-stories/{story_id}",
+                json={"status": "in_review"},
+                headers=get_jwt_headers(editor_id),
+            )
+            assert review_response.status_code == 200
 
-                # I approve the story using the reviewer's JWT.
-                approval_response = client.post(
-                    f"/api/v1/user-stories/{story_id}/approve",
-                    headers=get_jwt_headers(actor_id),
-                )
-                assert approval_response.status_code == 200
+            # I approve the story using the reviewer's JWT.
+            approval_response = client.post(
+                f"/api/v1/user-stories/{story_id}/approve",
+                headers=get_jwt_headers(actor_id),
+            )
+            assert approval_response.status_code == 200
 
         # I read the audit history after the story and actor are deleted.
         response = client.get(

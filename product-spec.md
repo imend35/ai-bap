@@ -1,164 +1,194 @@
-# AI BAP — Product Specification v1.0
+# AI BAP — Product Specification
 
-**Product:** AI BAP — AI-Powered Business Analysis Platform  
-**Version:** 1.0 (Draft)  
-**Date:** October 14, 2026  
-**Owner:** Project Author  
-**Status:** Proposed; implementation not yet verified
+**Product:** AI BAP — AI-Powered Business Analysis Platform
+**Version:** 1.0
+**Status:** Implemented MVP with documented limitations
 
 ## 1. Product Vision
 
-I am building AI BAP to help business analysts and agile delivery teams turn business requirements into structured, reviewable user stories, acceptance criteria, and trackable development tasks. I want to preserve traceability from the original requirement through delivery while keeping people responsible for approving AI-generated content.
+I am building AI BAP to help business-analysis and delivery teams transform
+business requirements into structured, reviewable user stories and traceable
+tasks. The product preserves human responsibility for review and approval,
+including when an optional AI draft generator is used.
 
 ## 2. Problem Statement
 
-I aim to address fragmented requirements, inconsistent acceptance criteria, time-consuming story preparation, and limited visibility into how requirements translate into delivery tasks. My first release will focus on a coherent end-to-end workflow rather than attempting to replace enterprise project management suites.
+Requirements, review decisions, and delivery tasks are often disconnected. AI
+BAP provides one authenticated workspace for recording requirements, managing
+their downstream work, reviewing user stories, and inspecting dashboard and
+traceability data.
 
-## 3. Users and MVP Assumptions
+## 3. Users, Roles, and Access Model
 
-My target users are Business Analysts, Product Owners, Scrum Masters, Developers, and QA Engineers. For the initial local MVP, I plan a **single demo workspace with synthetic data**. I will not expose sensitive or real customer data. Public deployment will require a security review and either safe read-only demo access or appropriate authentication and authorization before enabling writes.
+The implemented application has authenticated users and the following roles:
 
-## 4. MVP Scope
+- **Administrator (`admin`):** administers user accounts and performs project
+  archive and restore operations. Administrators also have access to other
+  authorized business workflows.
+- **Business Analyst (`business_analyst`):** creates and updates permitted
+  project, requirement, user-story, task, and sprint content.
+- **Reviewer (`reviewer`):** reads authorized project data and approves or
+  rejects user stories in review.
+
+Permissions are enforced in the backend with JWT identity and route-level role
+checks. The OpenAPI contract is the authoritative operation-by-operation
+reference.
+
+## 4. Functional Requirements
 
 ### FR-001 — Project Management
 
-I can create, list, view, edit, and archive projects. Archived projects remain readable but cannot receive new active work until restored.
+Authorized users can create, list, view, and update projects according to their
+role. Administrators can archive and restore a project.
+
+- Default project lists return active projects; `archived=true` returns archived
+  projects with filtering applied before totals and pagination.
+- Archive and restore actions are idempotent and preserve the project workflow
+  status.
+- Archived projects remain readable to authorized users, including project
+  dashboard and traceability reads.
+- An archived project is read-only. Project updates and related requirement,
+  user-story, task, sprint, approval/rejection, and AI-draft mutations are
+  rejected until the project is restored.
 
 ### FR-002 — Requirement Management
 
-I can create, list, view, edit, and categorize requirements within a project. Every requirement has a title, description, status, and stable identifier.
+Authorized users can create, list, view, and update requirements belonging to a
+project. Requirement records include validated title, description, priority,
+status, a stable readable record number, creator metadata, and timestamps.
 
-### FR-003 — AI-Assisted Story Drafting
+### FR-003 — Optional AI-Assisted Story Drafting
 
-I can request a draft user story from a selected requirement. The system returns a title, an As a / I want / So that narrative, and proposed acceptance criteria. The result is labeled **AI-generated draft**, not an approved story. I can edit, approve, or reject it. An AI provider failure must not corrupt stored requirements.
+Authorized users can request a user-story draft for a requirement through the
+implemented generation endpoint. The backend has an OpenAI SDK adapter that
+requires an explicitly configured API key and validates the returned JSON
+shape. Without configuration or on provider failure, it returns a controlled
+error and does not modify stored requirements.
 
-### FR-004 — User Story Management
+The application does not treat generated content as approved automatically. A
+human must review and explicitly submit, approve, or reject user-story work.
 
-I can create and edit user stories, link each story to a requirement, and explicitly approve AI-generated drafts before they enter the active backlog.
+### FR-004 — User Story Management and Review
+
+Authorized users can create, list, view, and update user stories linked to a
+requirement. User stories move through the implemented draft, in-review,
+approved, and rejected states.
+
+Administrators and reviewers can approve or reject only stories in review. The
+application persists an audit record for each decision, including immutable
+actor and story identity snapshots for historical continuity.
 
 ### FR-005 — Task Management
 
-I can create tasks linked to stories and move them through To Do, In Progress, In Review, and Done.
+Authorized users can create, list, view, and update tasks linked to user
+stories. Implemented task states are To Do, In Progress, In Review, and Done.
+Tasks may be assigned to a sprint where permitted by the API validation rules.
 
 ### FR-006 — Sprint Management
 
-I can create sprints with start and end dates, assign eligible tasks to a sprint, and inspect sprint work. A sprint end date must not precede its start date.
+Authorized users can create, list, view, and update project sprints. Sprints
+have validated start and end dates and the implemented planned, active,
+completed, and cancelled statuses.
 
 ### FR-007 — Project Dashboard
 
-I can see counts of requirements, approved stories, tasks by status, and active sprints. Dashboard numbers must be derived from stored records.
+Authorized users can retrieve project dashboard counts for requirements,
+approved user stories, tasks by status, and active sprints. Values are derived
+from persisted records.
 
 ### FR-008 — Traceability
 
-I can navigate the chain Requirement → User Story → Task. Orphaned tasks are not allowed in the MVP.
+Authorized users can retrieve a paginated Requirement → User Story → Task
+hierarchy for a project. This provides a read-only traceability view of the
+implemented relationships.
 
-### FR-009 — AI Generation Audit
+### FR-009 — User-Story Decision Audit
 
-I can inspect generation timestamps, associated requirement IDs, draft status, model/provider metadata when available, and approval decisions. Secrets and unnecessary raw personal data must not be stored in audit logs.
+Authorized readers can retrieve approval and rejection audit history for a user
+story. This requirement documents the implemented decision-audit endpoint; it
+does not claim a separately persisted external AI-provider audit log.
 
-## 5. Key User Stories and Acceptance Criteria
+## 5. Core User Journeys
 
 ### US-001 — Capture a Requirement
 
-**As a** Business Analyst, **I want** to create a requirement in a project **so that** I can maintain a structured source of business needs.
+As a Business Analyst, I create a project and capture a validated requirement
+so that the source business need has a structured, traceable record.
 
-- **Given** an existing project, **when** I submit a valid title and description, **then** a requirement is stored and shown in the project list.
-- **Given** an empty title, **when** I submit the form, **then** I receive a validation error and no record is created.
+### US-002 — Review a User Story
 
-### US-002 — Generate an AI Story Draft
-
-**As a** Business Analyst, **I want** to generate a story draft from a requirement **so that** I can accelerate analysis without surrendering editorial control.
-
-- **Given** a valid requirement, **when** I request generation and the provider responds successfully, **then** I receive an editable draft with acceptance criteria.
-- **Given** a provider timeout or error, **when** generation fails, **then** I see a recoverable error and the original requirement remains unchanged.
-- **Given** an unapproved AI draft, **when** I reject it, **then** it is not added to the approved backlog.
-- **Given** an edited draft, **when** I approve it, **then** its approved version is stored and linked to the source requirement.
+As a Reviewer, I inspect a user story in review and explicitly approve or
+reject it so that the decision and actor identity are recorded.
 
 ### US-003 — Track Delivery
 
-**As a** Scrum Master, **I want** to associate tasks with stories and sprints **so that** I can follow delivery progress.
-
-- **Given** an approved story, **when** I add a task, **then** the task is linked to that story.
-- **Given** a task, **when** I change its status to an allowed value, **then** the new status is persisted.
-- **Given** an invalid status, **when** I submit an update, **then** the API rejects it with a clear validation response.
+As a delivery user, I create tasks linked to user stories, update their status,
+and assign eligible tasks to sprints so that delivery progress is visible.
 
 ### US-004 — Inspect Traceability
 
-**As a** QA Engineer, **I want** to view the requirement-to-task chain **so that** I can assess coverage and change impact.
+As a reviewer or QA user, I inspect the requirement-to-story-to-task hierarchy
+and project dashboard so that I can assess delivery coverage and status.
 
-- **Given** a requirement with linked stories and tasks, **when** I open traceability, **then** I see the correct linked records and their statuses.
+### US-005 — Preserve Archived History
+
+As an Administrator, I archive a project without changing its workflow status.
+Authorized users can still read its history, but write operations remain blocked
+until I restore it.
 
 ## 6. Non-Functional Requirements
 
-- **NFR-001 Maintainability:** I will separate frontend views, API client, backend routes, services, and persistence logic.
-- **NFR-002 Testability:** I will add automated unit and integration tests for critical workflows, including invalid input and AI failure paths.
-- **NFR-003 Security:** I will validate inputs, keep secrets out of source control, apply least-privilege principles, and document AI data handling. Public write access will require appropriate safeguards.
-- **NFR-004 Performance:** I will target a local p95 response time below 500 ms for basic non-AI API operations under a documented test workload; this is a target, not a measured result.
-- **NFR-005 Observability:** I will expose a health endpoint and structured logs, and add operational metrics/tracing as the project matures.
-- **NFR-006 Reproducibility:** I will document setup and provide Docker Compose for the application and database.
-- **NFR-007 Accessibility:** I will use labeled inputs, keyboard-operable controls, and readable error messages.
+- **Security:** The backend validates input, hashes passwords, issues JWTs,
+  applies route-level role checks, and keeps secrets in environment variables.
+- **Data integrity:** PostgreSQL constraints, foreign keys, migrations,
+  archive-state checks, and readable record-number triggers support persistence
+  integrity.
+- **Testability:** The backend has unit and API integration tests and a guarded
+  isolated PostgreSQL test database procedure.
+- **Contract consistency:** `openapi.yaml` documents the versioned API contract
+  and has focused alignment tests.
+- **Reproducibility:** The root README documents local PostgreSQL, Alembic,
+  backend, frontend, and isolated-test setup.
+- **Accessibility and performance:** These remain areas for continued
+  verification; no accessibility audit or performance benchmark is claimed.
 
-## 7. Proposed Architecture
+## 7. Current Architecture and Delivery Position
 
-- **Frontend:** React, TypeScript, Vite; centralized API client; Vitest for core UI logic.
-- **Backend:** Python, FastAPI; Pydantic validation; SQLAlchemy and Alembic.
-- **Database:** PostgreSQL with environment-specific configuration.
-- **AI:** Provider abstraction with configurable credentials and a deterministic mock for tests.
-- **Contract:** OpenAPI 3.x maintained as the agreed interface between frontend and backend.
-- **Delivery:** Docker Compose, GitHub Actions, cloud deployment after passing tests.
-- **Operations:** Structured logging, health checks, and OpenTelemetry-based instrumentation where feasible.
+The implemented application uses React, TypeScript, and Vite in the frontend;
+FastAPI, SQLAlchemy, and Alembic in the backend; and PostgreSQL for persistence.
+The main Compose configuration starts PostgreSQL only. The backend and frontend
+are run locally as separate processes.
 
-These are design decisions to validate during implementation, not completed features.
+The repository has backend automated tests and recorded quality-check results.
+Frontend automated tests and CI workflows are not configured. The application
+is not presented as publicly deployed.
 
-## 8. Preliminary Data Model
+## 8. Data Relationships
 
-- **Project:** id, name, description, status, created_at.
-- **Requirement:** id, project_id, title, description, status, created_at, updated_at.
-- **UserStory:** id, requirement_id, title, narrative, approval_status, created_at.
-- **AcceptanceCriterion:** id, story_id, text, position.
-- **Task:** id, story_id, sprint_id (optional), title, description, status.
-- **Sprint:** id, project_id, name, start_date, end_date, status.
-- **AIGenerationRecord:** id, requirement_id, story_id (optional), provider, model, status, created_at.
-
-I will finalize constraints, migrations, and deletion/archive behavior before implementing the database.
+- A project has requirements and sprints.
+- A requirement has user stories.
+- A user story has tasks and review-decision audit records.
+- A task may be assigned to a sprint.
+- Users create records and, where applicable, perform archive and review
+  actions recorded in response and audit data.
 
 ## 9. Business Rules
 
-1. A requirement belongs to exactly one project.
-2. A user story belongs to exactly one requirement in the MVP.
-3. A task belongs to exactly one story and may be assigned to one sprint.
-4. AI-generated drafts require explicit human approval before entering the approved backlog.
-5. The API rejects unknown workflow states and invalid sprint date ranges.
-6. Archiving preserves historical traceability.
+1. Protected API operations require a valid JWT.
+2. The backend enforces authorization according to the authenticated role.
+3. A user story belongs to one requirement, and a task belongs to one user
+   story.
+4. Approval and rejection require a user story to be in review.
+5. Archived projects remain readable but reject protected mutations until
+   restored.
+6. Record numbers are database-generated and immutable after assignment.
+7. Sprint end dates cannot precede sprint start dates.
 
-## 10. Out of Scope for v1.0
+## 10. Current Limitations and Future Work
 
-I will not implement Jira synchronization, enterprise SSO, live collaborative editing, automated production code deployment by an AI agent, or advanced portfolio/resource optimization in the initial MVP.
-
-## 11. AI Development and Agent Extension Evidence
-
-I will maintain `AGENTS.md` and `docs/ai-development-log.md` to document prompts, delegated tasks, human review, and verification. I plan to deliver a reusable requirements-review workflow, a specialist agent, a constrained MCP integration, a guardrail/hook, and permissions documentation. I will also preserve security scan results, PR audit evidence, operational diagnosis notes, and an AI tool/data policy. I will not claim these artifacts exist until implemented.
-
-## 12. Definition of Done
-
-I consider a feature complete only when its acceptance criteria are met, the relevant tests pass, security implications are reviewed, documentation is updated, and the change is committed with a descriptive message.
-
-## 13. Release Acceptance Checklist
-
-- [ ] Requirements and architecture are documented.
-- [ ] Frontend and backend implement the agreed OpenAPI contract.
-- [ ] Persistent storage and migrations work in a clean environment.
-- [ ] Unit and integration tests pass.
-- [ ] Docker Compose starts the full local stack.
-- [ ] CI runs tests and deployment is gated on success.
-- [ ] A working cloud deployment or verifiable deployment evidence is available.
-- [ ] Agent extension and security/DevOps evidence are documented.
-- [ ] README provides complete setup, test, and deployment instructions.
-- [ ] Peer-review and submission requirements are checked against the final 2026 course rules.
-
-## 14. Open Decisions
-
-- Confirm whether the first deployment is a read-only demo or includes authenticated write access.
-- Select the AI provider and a safe fallback/mock strategy.
-- Select hosting based on availability, cost, and secret-management support.
-- Recheck the official 2026 rubric before final submission because it may change.
+The MVP does not currently provide public deployment evidence, CI/CD workflows,
+frontend automated tests, enterprise SSO, Jira synchronization, real-time
+collaboration, advanced capacity forecasting, or a full application Docker
+Compose topology. Future work will add frontend coverage, CI quality gates,
+deployment documentation, observability, and further validation of optional AI
+provider behavior.

@@ -1439,8 +1439,9 @@ function App() {
         err instanceof Error ? err.message : "Unable to load audit history.",
       );
     } finally {
-      if (auditRequestGeneration.current !== requestGeneration) return;
-      setIsLoadingAudit(false);
+      if (auditRequestGeneration.current === requestGeneration) {
+        setIsLoadingAudit(false);
+      }
     }
   }
 
@@ -3715,7 +3716,7 @@ function App() {
                           type="button"
                           className="secondary-light-button"
                           disabled={isSaving}
-                          onClick={resetTaskForm}
+                          onClick={() => resetTaskForm()}
                         >
                           Cancel
                         </button>
@@ -3861,7 +3862,7 @@ function App() {
                         type="button"
                         className="secondary-light-button"
                         disabled={isSaving}
-                        onClick={resetProjectForm}
+                        onClick={() => resetProjectForm()}
                       >
                         Cancel
                       </button>

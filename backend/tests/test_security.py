@@ -2,8 +2,8 @@
 """I test JWT authentication and active-user security checks."""
 
 from types import SimpleNamespace
-from uuid import uuid4
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, status
@@ -61,9 +61,8 @@ def test_invalid_jwt_is_rejected(token):
     with patch(
         "app.security.verify_access_token",
         return_value=None,
-    ):
-        with pytest.raises(HTTPException) as exc_info:
-            get_current_user(make_credentials(token), db)
+    ), pytest.raises(HTTPException) as exc_info:
+        get_current_user(make_credentials(token), db)
 
     assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
     assert exc_info.value.detail == "Invalid or expired access token."
@@ -78,12 +77,11 @@ def test_expired_jwt_is_rejected():
     with patch(
         "app.security.verify_access_token",
         return_value=None,
-    ) as mocked_verifier:
-        with pytest.raises(HTTPException) as exc_info:
-            get_current_user(
-                make_credentials("expired-jwt-token"),
-                db,
-            )
+    ) as mocked_verifier, pytest.raises(HTTPException) as exc_info:
+        get_current_user(
+            make_credentials("expired-jwt-token"),
+            db,
+        )
 
     mocked_verifier.assert_called_once_with("expired-jwt-token")
 
@@ -100,12 +98,11 @@ def test_missing_database_user_is_rejected():
     with patch(
         "app.security.verify_access_token",
         return_value=user_id,
-    ):
-        with pytest.raises(HTTPException) as exc_info:
-            get_current_user(
-                make_credentials("valid-test-jwt"),
-                db,
-            )
+    ), pytest.raises(HTTPException) as exc_info:
+        get_current_user(
+            make_credentials("valid-test-jwt"),
+            db,
+        )
 
     assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
     assert exc_info.value.detail == "User account not found."
@@ -126,12 +123,11 @@ def test_inactive_user_is_rejected():
     with patch(
         "app.security.verify_access_token",
         return_value=user_id,
-    ):
-        with pytest.raises(HTTPException) as exc_info:
-            get_current_user(
-                make_credentials("valid-test-jwt"),
-                db,
-            )
+    ), pytest.raises(HTTPException) as exc_info:
+        get_current_user(
+            make_credentials("valid-test-jwt"),
+            db,
+        )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
     assert exc_info.value.detail == "User account is inactive."

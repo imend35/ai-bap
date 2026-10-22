@@ -91,12 +91,11 @@ def test_valid_jwt_returns_correct_user(registered_user):
 
 def test_missing_bearer_token_is_rejected():
     """I verify that authentication requires a bearer token."""
-    with SessionLocal() as db:
-        with pytest.raises(HTTPException) as exc_info:
-            get_current_user(
-                credentials=None,
-                db=db,
-            )
+    with SessionLocal() as db, pytest.raises(HTTPException) as exc_info:
+        get_current_user(
+            credentials=None,
+            db=db,
+        )
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == "Missing bearer token."
@@ -106,12 +105,11 @@ def test_invalid_jwt_is_rejected():
     """I verify that an invalid JWT cannot authenticate."""
     credentials = make_credentials("invalid.jwt.token")
 
-    with SessionLocal() as db:
-        with pytest.raises(HTTPException) as exc_info:
-            get_current_user(
-                credentials=credentials,
-                db=db,
-            )
+    with SessionLocal() as db, pytest.raises(HTTPException) as exc_info:
+        get_current_user(
+            credentials=credentials,
+            db=db,
+        )
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == "Invalid or expired access token."
@@ -125,12 +123,11 @@ def test_deleted_user_jwt_is_rejected():
     token = create_access_token(nonexistent_user_id)
     credentials = make_credentials(token)
 
-    with SessionLocal() as db:
-        with pytest.raises(HTTPException) as exc_info:
-            get_current_user(
-                credentials=credentials,
-                db=db,
-            )
+    with SessionLocal() as db, pytest.raises(HTTPException) as exc_info:
+        get_current_user(
+            credentials=credentials,
+            db=db,
+        )
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == "User account not found."
@@ -165,12 +162,11 @@ def test_inactive_user_jwt_is_rejected(registered_user):
         user.is_active = False
         db.commit()
 
-    with SessionLocal() as db:
-        with pytest.raises(HTTPException) as exc_info:
-            get_current_user(
-                credentials=credentials,
-                db=db,
-            )
+    with SessionLocal() as db, pytest.raises(HTTPException) as exc_info:
+        get_current_user(
+            credentials=credentials,
+            db=db,
+        )
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "User account is inactive."

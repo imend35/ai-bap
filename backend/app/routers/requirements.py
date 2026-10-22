@@ -17,15 +17,15 @@ from app.role_permissions import (
     REVIEWER,
     require_roles,
 )
-from app.services.project_archive import (
-    lock_writable_project,
-    resolve_project_id_for_requirement,
-)
 from app.schemas.requirement import (
     RequirementCreate,
     RequirementListResponse,
     RequirementResponse,
     RequirementUpdate,
+)
+from app.services.project_archive import (
+    lock_writable_project,
+    resolve_project_id_for_requirement,
 )
 
 router = APIRouter(

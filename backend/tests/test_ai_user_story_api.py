@@ -19,7 +19,6 @@ from app.services.ai.user_story_generator import (
     GeneratedUserStory,
 )
 
-
 GENERATE_URL = "/api/v1/user-stories/generate"
 WRITE_ROLES = [ADMIN, BUSINESS_ANALYST]
 

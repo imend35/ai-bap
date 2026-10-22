@@ -10,8 +10,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
-    from app.models.user_story import UserStory
     from app.models.sprint import Sprint
+    from app.models.user_story import UserStory
 
 class Task(Base):
     """Represent a development task linked to a user story."""

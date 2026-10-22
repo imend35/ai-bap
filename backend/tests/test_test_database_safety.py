@@ -1,7 +1,8 @@
 """I test the fail-closed integration-test database guard."""
 
-import pytest
 from types import SimpleNamespace
+
+import pytest
 
 from app.test_database_safety import (
     LEGACY_MIGRATION_TEST_CONFIRMATION_VALUE,

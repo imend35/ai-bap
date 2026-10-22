@@ -9,7 +9,6 @@ from app.models.user import User
 from app.models.user_story import UserStory
 from app.models.user_story_approval_audit import UserStoryApprovalAudit
 
-
 # I expose the models required by my application and migrations.
 __all__ = [
     "Project",

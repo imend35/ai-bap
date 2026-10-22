@@ -11,7 +11,6 @@ from app.database import get_db
 from app.jwt_service import verify_access_token
 from app.models.user import User
 
-
 # I define the JWT bearer authentication scheme for protected endpoints.
 bearer_scheme = HTTPBearer(
     scheme_name="JWTBearer",

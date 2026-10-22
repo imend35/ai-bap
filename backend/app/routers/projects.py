@@ -1,7 +1,7 @@
 
 """I provide JWT-protected API endpoints for project management."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -331,7 +331,11 @@ def get_project_traceability(
     )
 
 
-@router.post("/{project_id}/archive", response_model=ProjectResponse)
+@router.post(
+    "/{project_id}/archive",
+    response_model=ProjectResponse,
+    operation_id="archiveProject",
+)
 def archive_project(
     project_id: UUID,
     db: Annotated[Session, Depends(get_db)],
@@ -355,7 +359,7 @@ def archive_project(
         )
 
     if project.archived_at is None:
-        project.archived_at = datetime.now(timezone.utc)
+        project.archived_at = datetime.now(UTC)
         project.archived_by_id = current_user.id
         project.archived_by = current_user
         db.commit()
@@ -366,7 +370,11 @@ def archive_project(
     return project
 
 
-@router.post("/{project_id}/restore", response_model=ProjectResponse)
+@router.post(
+    "/{project_id}/restore",
+    response_model=ProjectResponse,
+    operation_id="restoreProject",
+)
 def restore_project(
     project_id: UUID,
     db: Annotated[Session, Depends(get_db)],

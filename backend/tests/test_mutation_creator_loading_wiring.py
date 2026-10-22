@@ -31,7 +31,6 @@ def get_function_source(router_name: str, function_name: str) -> ast.FunctionDef
 @pytest.mark.parametrize(
     ("router_name", "function_name", "model_name"),
     [
-        ("projects.py", "update_project", "Project"),
         ("requirements.py", "update_requirement", "Requirement"),
         ("user_stories.py", "update_user_story", "UserStory"),
         ("user_story_approvals.py", "approve_user_story", "UserStory"),
@@ -58,6 +57,30 @@ def test_mutation_handlers_eager_load_creators_for_responses(
     assert "created_by_id" not in ast.unparse(function)
 
 
+def test_project_update_reuses_the_creator_and_archive_actor_loader() -> None:
+    """I reload a changed project with every response actor relationship."""
+    update_function = get_function_source("projects.py", "update_project")
+    loader_function = get_function_source(
+        "projects.py",
+        "get_project_with_relationships",
+    )
+    loader_relationships = [
+        ast.unparse(node.args[0])
+        for node in ast.walk(loader_function)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "selectinload"
+        and node.args
+    ]
+
+    assert (
+        ast.unparse(update_function).count("get_project_with_relationships")
+        == 2
+    )
+    assert loader_relationships == ["Project.created_by", "Project.archived_by"]
+    assert "created_by_id" not in ast.unparse(update_function)
+
+
 @pytest.mark.parametrize(
     ("schema", "source"),
     [
@@ -73,6 +96,8 @@ def test_mutation_handlers_eager_load_creators_for_responses(
                 name="Updated Project",
                 description=None,
                 status="active",
+                archived_at=None,
+                archived_by=None,
                 created_at=CREATED_AT,
                 updated_at=CREATED_AT,
             ),

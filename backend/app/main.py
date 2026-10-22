@@ -16,7 +16,6 @@ from app.routers.user_story_approvals import (
     router as user_story_approvals_router,
 )
 
-
 app = FastAPI(
     title="AI BAP API",
     description="AI-Powered Business Analysis Platform",

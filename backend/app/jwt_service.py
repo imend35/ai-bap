@@ -1,7 +1,7 @@
 
 """I create and verify JWT access tokens for AI BAP."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import jwt
@@ -14,7 +14,7 @@ def create_access_token(user_id: UUID) -> str:
     """I create a signed access token for a platform user."""
     settings = get_settings()
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = now + timedelta(
         minutes=settings.jwt_access_token_expire_minutes
     )

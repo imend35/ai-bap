@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session
 
 from app.models import Project, Requirement, Sprint, Task, UserStory
 
-
 ARCHIVED_PROJECT_READ_ONLY_DETAIL = (
     "Archived projects are read-only. Restore the project before making changes."
 )

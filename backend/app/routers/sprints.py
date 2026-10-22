@@ -27,7 +27,6 @@ from app.services.project_archive import (
     resolve_project_id_for_sprint,
 )
 
-
 router = APIRouter(
     prefix="/api/v1/sprints",
     tags=["Sprints"],

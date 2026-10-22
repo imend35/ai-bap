@@ -13,7 +13,6 @@ from app.models import Project, Sprint
 from app.role_permissions import ADMIN, BUSINESS_ANALYST, REVIEWER
 from app.security import get_current_user
 
-
 SPRINTS_URL = "/api/v1/sprints"
 
 UNKNOWN_ID = UUID("00000000-0000-0000-0000-000000000000")

@@ -9,10 +9,9 @@ from fastapi.testclient import TestClient
 
 from app.database import SessionLocal
 from app.main import app
-from app.models import Project, Requirement, Sprint, Task, UserStory
+from app.models import Project, Requirement, Task, UserStory
 from app.role_permissions import ADMIN, BUSINESS_ANALYST, REVIEWER
 from app.security import get_current_user
-
 
 TASKS_URL = "/api/v1/tasks"
 

@@ -6,7 +6,6 @@ database, so they are safe to run without using the configured application DB.
 
 from pathlib import Path
 
-
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MODELS_ROOT = BACKEND_ROOT / "app" / "models"
 MIGRATION = (

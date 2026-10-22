@@ -3,7 +3,6 @@
 
 from pwdlib import PasswordHash
 
-
 # I use Argon2id to protect user passwords.
 password_hasher = PasswordHash.recommended()
 

@@ -4,7 +4,6 @@ import os
 from collections.abc import MutableMapping
 from typing import Any
 
-
 TEST_MODE_VALUE = "true"
 TEST_CONFIRMATION_VALUE = "isolated-postgresql-acknowledged"
 TEST_DATABASE_SETTINGS = {

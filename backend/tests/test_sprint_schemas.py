@@ -3,10 +3,13 @@
 
 from datetime import date
 from uuid import uuid4
+
 import pytest
 from pydantic import ValidationError
 
 from app.schemas.sprint import SprintCreate, SprintStatus, SprintUpdate
+
+
 def test_create_sprint_with_valid_dates():
     """Verify that a valid sprint date range is accepted."""
     project_id = uuid4()
