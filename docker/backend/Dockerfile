@@ -1,0 +1,29 @@
+FROM ghcr.io/astral-sh/uv:0.6.10 AS uv
+
+FROM python:3.13-slim
+
+RUN groupadd --gid 10001 app \
+    && useradd --uid 10001 --gid app --create-home --shell /usr/sbin/nologin app
+
+WORKDIR /app
+
+COPY --from=uv /uv /uvx /bin/
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
+
+COPY backend/app ./app
+COPY backend/migrations ./migrations
+COPY backend/alembic.ini ./alembic.ini
+COPY docker/backend/initialize_fresh_database.py /usr/local/bin/initialize_fresh_database.py
+
+RUN chown -R app:app /app /usr/local/bin/initialize_fresh_database.py
+
+ENV PATH="/app/.venv/bin:${PATH}" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+USER 10001:10001
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

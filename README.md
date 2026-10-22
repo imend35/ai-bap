@@ -5,9 +5,9 @@ projects, requirements, user stories, delivery tasks, and sprints in one
 traceable workflow. It uses a React frontend, a FastAPI backend, PostgreSQL,
 SQLAlchemy, Alembic, and an OpenAPI contract.
 
-The application is under active development. It is not publicly deployed, and
-this repository does not currently contain CI workflows or frontend automated
-tests.
+The application is under active development and is not publicly deployed.
+GitHub Actions validates the frontend and backend on pushes and pull requests
+to `main`; deployment automation is not configured.
 
 ## Project Overview
 
@@ -75,11 +75,12 @@ are not the security boundary. See the operation-specific requirements in
 | Authentication | JWT with PyJWT; Argon2id password hashing |
 | API contract | OpenAPI 3.1 in `openapi.yaml` |
 | Backend quality | Pytest, HTTPX, Ruff |
-| Frontend quality | TypeScript build, Oxlint |
+| Frontend quality | Vitest, React Testing Library, TypeScript build, Oxlint |
 | Optional AI integration | OpenAI Python SDK, configured by environment |
 
-The current [compose.yaml](compose.yaml) runs **PostgreSQL only**. The FastAPI
-backend and Vite frontend are started locally with the commands below.
+The main [compose.yaml](compose.yaml) runs the frontend, FastAPI backend, and
+PostgreSQL as one local Compose application. The direct backend and Vite
+commands below remain useful for focused development.
 
 ## Repository Structure
 
@@ -96,7 +97,7 @@ ai-bap/
 │   └── package.json
 ├── docker/                  # Test and migration-rehearsal support files
 ├── docs/                    # Architecture and operational documentation
-├── compose.yaml             # Development PostgreSQL service
+├── compose.yaml             # Full local frontend, API, and PostgreSQL stack
 ├── compose.test.yaml        # Isolated PostgreSQL test service
 ├── openapi.yaml             # Checked-in API contract
 └── product-spec.md          # Product scope and acceptance criteria
@@ -107,7 +108,7 @@ ai-bap/
 - Python 3.13 or later
 - [uv](https://docs.astral.sh/uv/)
 - Node.js and npm
-- Docker Desktop with Docker Compose, for PostgreSQL
+- Docker Desktop with Docker Compose, for the complete local stack
 
 ## Environment Configuration
 
@@ -131,20 +132,59 @@ controlled configuration error. The frontend defaults to
 `http://127.0.0.1:8000` and can be pointed elsewhere with
 `VITE_API_BASE_URL`.
 
-## PostgreSQL Setup
+## Full-Stack Docker Compose Setup
 
-From the repository root, start the development database:
+Copy the safe example before the first local startup and replace its placeholder
+database password and JWT signing key. Never commit `.env`.
 
 ```powershell
-docker compose up -d
+Copy-Item .env.example .env
+docker compose up --build -d
 ```
 
-The service is PostgreSQL 16, bound to loopback only. Its host port comes from
-`POSTGRES_PORT` and defaults to `5433`. This Compose file does not start the
-backend or frontend.
+The command starts four local services: PostgreSQL (`db`), the one-shot
+fresh-database initializer (`migrate`), FastAPI (`api`), and nginx-hosted React
+assets (`frontend`). Open `http://localhost:8080`; the API health endpoint is
+available at `http://127.0.0.1:8000/api/v1/health`. Browser `/api/...` requests
+are proxied by nginx to FastAPI, so the containerized UI uses same-origin API
+routing.
 
-Confirm the target database values in `.env` before any migration command.
-Do not use the development database for automated integration tests.
+All published ports bind to loopback only. PostgreSQL defaults to host port
+`5433`, FastAPI to `8000`, and the frontend to `8080`; change only the
+non-secret port values in `.env` when needed.
+
+### Fresh database initialization safety
+
+The `migrate` service applies Alembic only when the Compose database has an
+empty `public` schema and `AI_BAP_INITIALIZE_FRESH_DATABASE=true`. If it sees
+any existing public table, it exits without applying a migration. This prevents
+the Compose startup path from upgrading an existing persistent database.
+
+For an existing database, review its target and run the documented Alembic
+procedure manually. Do not use the development database for automated
+integration tests; use the isolated test procedure below instead.
+
+### Health checks and shutdown
+
+```powershell
+docker compose ps
+Invoke-WebRequest http://127.0.0.1:8000/api/v1/health
+docker compose down
+```
+
+`docker compose down` stops the stack but retains the named PostgreSQL volume.
+Do not add `--volumes` unless intentionally discarding a disposable local
+database.
+
+### Troubleshooting
+
+- If `migrate` reports an existing database, it intentionally made no schema
+  change. Review the target and use the manual Alembic workflow.
+- If a loopback port is busy, set `POSTGRES_PORT`, `API_PORT`, or
+  `FRONTEND_PORT` to an unused local port in `.env` and restart.
+- Use `docker compose logs migrate`, `docker compose logs api`, or
+  `docker compose logs frontend` for non-sensitive diagnostics. Never copy
+  credentials into issue comments or reports.
 
 ## Alembic Database Migrations
 
@@ -236,8 +276,45 @@ npm run lint
 The latest recorded backend verification passed 511 tests, and Ruff passed.
 The frontend TypeScript/Vite production build passes. Oxlint currently reports
 16 warnings and no errors; these warnings concern synchronous state updates in
-dependency-driven data-loading effects. Frontend automated tests are not yet
-configured.
+dependency-driven data-loading effects. Frontend automated tests use Vitest
+with mocked API responses and cover the initial authentication/project flows.
+
+### Unified test execution
+
+From the repository root, run:
+
+```powershell
+.\scripts\test-all.ps1
+```
+
+The runner executes the mocked frontend Vitest suite first. It then runs
+backend Pytest only when the current shell has the exact isolated PostgreSQL
+test configuration described in
+[docs/isolated-test-database.md](docs/isolated-test-database.md). If that
+explicit setup is unavailable, it reports the backend phase as `SKIPPED` and
+exits nonzero rather than using the development database or reporting overall
+success. It never starts Docker or runs migrations.
+
+Run frontend tests independently from `frontend`:
+
+```powershell
+npm run test -- --run
+```
+
+See [docs/testing-strategy.md](docs/testing-strategy.md) for frontend mocking,
+backend database safety, runner exit behavior, and current coverage limits.
+
+### Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pushes and pull
+requests targeting `main`. The frontend job runs `npm ci`, Vitest, the Vite
+production build, and Oxlint. The backend job creates an ephemeral PostgreSQL
+16 service mapped to the exact tuple required by the fail-closed test guard,
+applies Alembic through the guarded test wrapper, then runs Pytest and Ruff.
+It uses only synthetic CI credentials and never targets a development database.
+
+The workflow is implemented locally but requires a pushed branch or pull
+request before GitHub can provide remote execution evidence.
 
 ## Security Considerations
 
@@ -255,11 +332,12 @@ configured.
 ## Known Limitations
 
 - The repository has no public deployment evidence.
-- GitHub Actions or other CI workflows are not configured.
-- The frontend has no automated test suite yet.
+- CI provides validation only; continuous deployment and a public deployment
+  are not configured.
 - Oxlint has 16 retained warnings and no errors; resolving them safely needs a
   separately scoped state-management refactor with frontend regression tests.
-- The main Compose configuration starts PostgreSQL only.
+- The Compose stack is local-only and has not been verified as a public
+  deployment topology.
 - The optional AI draft generator depends on an explicitly configured OpenAI
   API key and external provider availability.
 

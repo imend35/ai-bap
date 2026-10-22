@@ -49,8 +49,11 @@ external AI service.
 | Frontend verification | TypeScript/Vite build and Oxlint |
 | Optional AI adapter | OpenAI Python SDK |
 
-Frontend automated tests, CI workflows, public deployment, and OpenTelemetry
-instrumentation are not currently evidenced by this repository.
+Frontend automated tests are implemented. The repository includes a GitHub
+Actions CI workflow for frontend and backend validation. Local quality checks
+have passed, but the workflow has not yet been verified through a remote GitHub
+Actions run. Public deployment and OpenTelemetry instrumentation are not
+currently evidenced by this repository.
 
 ## 4. Application Modules
 
@@ -118,7 +121,7 @@ ai-bap/
 │   └── src/                 # React application
 ├── docker/                  # Test and migration-rehearsal support
 ├── docs/                    # Project and operational documentation
-├── compose.yaml             # Development PostgreSQL only
+├── compose.yaml             # Full local frontend, API, and PostgreSQL stack
 ├── compose.test.yaml        # Isolated PostgreSQL test database
 ├── openapi.yaml             # API contract
 └── README.md                # Setup and verification instructions
@@ -126,9 +129,16 @@ ai-bap/
 
 ## 8. Development and Test Database Topology
 
-The main [compose.yaml](../compose.yaml) creates one loopback-bound PostgreSQL
-16 service and persistent development volume. It does not start FastAPI or
-Vite. Developers start the backend and frontend as separate local processes.
+The main [compose.yaml](../compose.yaml) creates a loopback-bound local stack:
+PostgreSQL 16 with a persistent volume, a one-shot fresh-schema migration
+initializer, FastAPI, and nginx-hosted frontend assets. The frontend proxies
+same-origin `/api/` requests to FastAPI over the Compose network. Direct
+Uvicorn and Vite commands remain available for focused development.
+
+The initializer applies Alembic only to an empty `public` schema when the local
+initialization flag is enabled. It detects existing public tables and exits
+without applying migrations, so Compose startup does not automatically upgrade
+an existing persistent database.
 
 [compose.test.yaml](../compose.test.yaml) creates a separate Compose project,
 database, user, loopback port, and volume for database-backed tests. The
@@ -146,22 +156,21 @@ archive semantics, and supported API groups.
 
 ## 10. Runtime and Deployment Position
 
-The current local runtime is intentionally split:
-
-1. PostgreSQL starts through `docker compose up -d`.
-2. FastAPI runs locally with Uvicorn.
-3. The React frontend runs locally with Vite.
-
-No public deployment, cloud topology, CI pipeline, or full application Compose
-runtime is currently claimed. Those are future delivery concerns.
+The local Compose runtime starts the full application with
+`docker compose up --build -d`. Published ports are loopback-bound, and no
+public deployment or cloud topology is claimed. The repository includes a
+GitHub Actions CI workflow for frontend and backend validation. Local quality
+checks have passed, but the workflow has not yet been verified through a remote
+GitHub Actions run. The stack is a local reproducibility topology, not
+deployment evidence.
 
 ## 11. Testing and Quality Position
 
 Backend tests use Pytest and the isolated PostgreSQL safeguards where database
 access is required. Backend linting uses Ruff. The frontend has a passing
 TypeScript/Vite production build and Oxlint with no errors; 16 warnings remain
-in dependency-driven loading effects. Frontend automated tests are not yet
-configured.
+in dependency-driven loading effects. Frontend automated tests use Vitest with
+mocked API responses, and the latest documented unified run passed 515 tests.
 
 ## 12. Security Boundaries
 
@@ -178,8 +187,8 @@ configured.
 
 ## 13. Future Improvements
 
-- Add frontend component and workflow tests.
-- Add CI quality gates and deployment documentation.
+- Expand frontend component and workflow coverage.
+- Verify the CI workflow remotely and add deployment documentation.
 - Provide a complete frontend/backend container topology.
 - Refactor frontend loading state with regression tests to address retained
   Oxlint warnings.

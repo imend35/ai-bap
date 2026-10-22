@@ -1,14 +1,30 @@
-# The repository root is a Docker context only for the rehearsal image.
-# Send only the files copied by docker/migration-rehearsal/Dockerfile.
-**
-!backend/
-!backend/pyproject.toml
-!backend/uv.lock
-!backend/migrations/
-!backend/migrations/**
-!docker/
-!docker/migration-rehearsal/
-!docker/migration-rehearsal/Dockerfile
-!docker/migration-rehearsal/alembic.ini
-!docker/migration-rehearsal/env.py
-!docker/migration-rehearsal/rehearse.py
+# Version control and local editor data
+.git/
+.github/
+.vscode/
+.idea/
+
+# Local credentials, diagnostics, and data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.log
+backend/backups/
+backend/diagnostic_8_10_32.txt
+
+# Generated dependencies, artifacts, and caches
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+
+# Local-only project artifacts
+frontend/backups/
+tmp/
+temp/

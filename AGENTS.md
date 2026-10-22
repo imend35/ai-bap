@@ -12,6 +12,20 @@ My primary product requirements are defined in `product-spec.md`. The project ob
 
 I use specification-driven development and expect all implementation work to align with these documents.
 
+### Modular Context Documents
+
+Read the applicable modular documentation before taking action:
+
+- `product-spec.md` for functional requirements and acceptance criteria.
+- `docs/project-charter.md` for scope, objectives, and delivery position.
+- `docs/architecture.md` for implemented architecture and operational boundaries.
+- `docs/agent-team.md` for defined working roles, handoffs, and approval boundaries.
+- `docs/agent-workflow.md` for task intake, verification, issue updates, evidence, and incident handling.
+- `docs/Project.md` for the authoritative final-project rubric and peer-review requirement.
+- `docs/github-issues-plan.md` for public-tracker issue drafts until real issue URLs replace them.
+
+These documents provide context; they do not override explicit Human Product Owner authorization or the safety rules in this file.
+
 ## 2. Technology Stack
 
 - Frontend: React, TypeScript, Vite
