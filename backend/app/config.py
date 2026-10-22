@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy import URL
+from sqlalchemy import URL, make_url
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -17,9 +17,13 @@ class Settings(BaseSettings):
     # I manage the PostgreSQL connection settings.
     postgres_db: str = Field(default="ai_bap")
     postgres_user: str = Field(default="ai_bap_user")
-    postgres_password: SecretStr
+    postgres_password: SecretStr | None = None
     postgres_host: str = Field(default="127.0.0.1")
     postgres_port: int = Field(default=5433)
+    database_url_override: SecretStr | None = Field(
+        default=None,
+        validation_alias="DATABASE_URL",
+    )
 
     # I configure JWT authentication without exposing the signing secret.
     jwt_secret_key: SecretStr = Field(min_length=32)
@@ -48,6 +52,19 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> URL:
         """I build the PostgreSQL connection URL safely."""
+        if self.database_url_override is not None:
+            database_url = make_url(
+                self.database_url_override.get_secret_value()
+            )
+            if database_url.get_backend_name() != "postgresql":
+                raise ValueError("DATABASE_URL must target PostgreSQL.")
+            return database_url.set(drivername="postgresql+psycopg")
+
+        if self.postgres_password is None:
+            raise RuntimeError(
+                "POSTGRES_PASSWORD is required when DATABASE_URL is unset."
+            )
+
         return URL.create(
             drivername="postgresql+psycopg",
             username=self.postgres_user,
