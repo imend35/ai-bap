@@ -134,6 +134,36 @@ def test_free_startup_wrapper_does_not_start_the_api_after_migration_failure(
     assert wrapper.main() == 7
 
 
+def test_free_startup_wrapper_hides_child_failure_details(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """I keep a failed migration from relaying child-process diagnostic output."""
+    wrapper = load_free_startup_wrapper()
+    sensitive_marker = "synthetic-secret-like-marker"
+
+    def fail_migration(command: list[str], *, check: bool) -> None:
+        raise subprocess.CalledProcessError(
+            7,
+            command,
+            output=sensitive_marker,
+            stderr=sensitive_marker,
+        )
+
+    def unexpected_api_start(*_args: object) -> None:
+        pytest.fail("The API start script must not run after migration failure.")
+
+    monkeypatch.setattr(wrapper.subprocess, "run", fail_migration)
+    monkeypatch.setattr(wrapper.os, "execv", unexpected_api_start)
+
+    assert wrapper.main() == 7
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert output.err == "Database migration failed; the API will not start.\n"
+    assert sensitive_marker not in output.out
+    assert sensitive_marker not in output.err
+
+
 def test_free_startup_wrapper_does_not_start_the_api_after_bootstrap_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
