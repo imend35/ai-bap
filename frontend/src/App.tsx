@@ -171,7 +171,10 @@ type AuditResponse = {
 };
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.DEV
+    ? `http://${window.location.hostname}:8000`
+    : "");
 const PAGE_SIZE = 10;
 const SELECTOR_PAGE_SIZE = 20;
 const SPRINT_OPTION_PAGE_SIZE = 100;

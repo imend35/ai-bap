@@ -65,24 +65,28 @@ Each issue below includes a problem statement, scope, acceptance criteria, verif
 **Dependencies:** Approved test-runner design and dependencies.<br>
 **Agent-assisted evidence:** Link actual code/test reports and CI result.
 
-## 4. Add Pull-Request CI Quality Gates
+## 4. Verified Pull-Request CI Quality Gates
 
-**Problem statement:** No GitHub Actions workflow validates pull requests.
+**Problem statement:** GitHub Actions CI is implemented and verified for both
+a push to `main` and Pull Request #1.
 
-**Scope:** Add PR CI for backend tests/Ruff and frontend tests/build/lint using safe service configuration.
+**Scope:** Retain the evidence for the existing PR CI workflow, which runs
+backend tests/Ruff and frontend tests/build/lint using safe service
+configuration.
 
 **Acceptance criteria:**
 
-- Workflow triggers on pull requests targeting `main`.
-- Backend tests and Ruff run in an isolated service environment.
-- Frontend tests, build, and lint run after the frontend suite exists.
-- Logs do not expose credentials or connection secrets.
-- Failures are actionable and non-zero.
+- The existing workflow triggered on Pull Request #1 targeting `main`.
+- Backend tests and Ruff ran in an isolated ephemeral PostgreSQL service.
+- Frontend tests, build, and lint completed successfully in the pull-request workflow.
+- The recorded workflow evidence contains no credentials or connection secrets.
+- Job failures are configured to return non-zero outcomes.
 
-**Verification method:** Record a real workflow-run URL and results from a test pull request or permitted dispatch.<br>
+**Verification method:** Pull Request #1 completed successfully at <https://github.com/imend35/ai-bap/actions/runs/39826933174>.<br>
 **Rubric category:** CI/CD.<br>
-**Dependencies:** Stable local commands, frontend tests, GitHub Actions permissions.<br>
-**Agent-assisted evidence:** Link workflow file, run URL, and report after completion.
+**Dependencies:** Stable local commands, frontend tests, and GitHub Actions permissions.<br>
+**Agent-assisted evidence:** Link the workflow file, successful main push run,
+pull-request workflow run, and Codex report.
 
 ## 5. Implement Development CD and Manual Production Deployment
 

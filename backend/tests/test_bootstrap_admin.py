@@ -1,10 +1,11 @@
 """I test the initial-administrator bootstrap logic without a database."""
 
 from typing import Any, Self
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, ProgrammingError, SQLAlchemyError
 
 from app.password_service import verify_password
 from app.role_permissions import ADMIN
@@ -14,6 +15,22 @@ from scripts.bootstrap_admin import (
     bootstrap_initial_admin,
     validate_bootstrap_details,
 )
+
+
+class FakePostgresDiagnostic:
+    """I provide only PostgreSQL constraint metadata for an isolated test."""
+
+    def __init__(self, constraint_name: str) -> None:
+        self.constraint_name = constraint_name
+
+
+class FakePostgresIntegrityError(Exception):
+    """I model the safe metadata used to classify a PostgreSQL constraint error."""
+
+    sqlstate = "23505"
+
+    def __init__(self, constraint_name: str) -> None:
+        self.diag = FakePostgresDiagnostic(constraint_name)
 
 
 class FakeSession:
@@ -76,6 +93,20 @@ def test_validation_normalizes_email_and_full_name() -> None:
 
     assert str(details.email) == "admin@example.com"
     assert details.full_name == "Initial Administrator"
+
+
+def test_validation_accepts_the_isolated_bootstrap_fixture_email_shape() -> None:
+    """I keep generated isolated bootstrap emails compatible with UserRegister."""
+
+    email = f"bootstrap-{uuid4().hex}@example.com"
+
+    details = validate_bootstrap_details(
+        email,
+        "Isolated Bootstrap Administrator",
+        "IsolatedBootstrapPassword123!",
+    )
+
+    assert str(details.email) == email
 
 
 def test_validation_rejects_existing_schema_violations() -> None:
@@ -154,7 +185,11 @@ def test_bootstrap_rolls_back_integrity_error_without_exposing_it() -> None:
 
     session = FakeSession(
         scalar_results=[None, None],
-        commit_error=IntegrityError("INSERT", {}, Exception("duplicate")),
+        commit_error=IntegrityError(
+            "INSERT",
+            {},
+            FakePostgresIntegrityError("ix_users_email"),
+        ),
     )
 
     result = bootstrap_initial_admin(
@@ -165,6 +200,29 @@ def test_bootstrap_rolls_back_integrity_error_without_exposing_it() -> None:
     )
 
     assert result is BootstrapAdminResult.EMAIL_EXISTS
+    assert session.rollback_calls == 1
+
+
+def test_bootstrap_returns_generic_failure_for_an_unrelated_integrity_error() -> None:
+    """I fail closed without misreporting a different constraint as an email conflict."""
+
+    session = FakeSession(
+        scalar_results=[None, None],
+        commit_error=IntegrityError(
+            "INSERT",
+            {},
+            FakePostgresIntegrityError("uq_users_record_number"),
+        ),
+    )
+
+    result = bootstrap_initial_admin(
+        "admin@example.com",
+        "Initial Administrator",
+        "TestPassword123!",
+        session_factory=make_session_factory(session),
+    )
+
+    assert result is BootstrapAdminResult.FAILED
     assert session.rollback_calls == 1
 
 
@@ -182,3 +240,24 @@ def test_bootstrap_rolls_back_database_errors_without_database_details() -> None
 
     assert result is BootstrapAdminResult.FAILED
     assert session.rollback_calls == 1
+
+
+def test_bootstrap_reports_only_safe_phase_and_error_category_for_test_diagnostics() -> None:
+    """I retain a safe diagnostic category without retaining database details."""
+
+    session = FakeSession(
+        execute_error=ProgrammingError("SELECT", {}, Exception("sensitive detail")),
+    )
+    diagnostics: list[str] = []
+
+    result = bootstrap_initial_admin(
+        "admin@example.com",
+        "Initial Administrator",
+        "TestPassword123!",
+        session_factory=make_session_factory(session),
+        diagnostic_reporter=diagnostics.append,
+    )
+
+    assert result is BootstrapAdminResult.FAILED
+    assert diagnostics == ["advisory_lock:programming_error"]
+    assert "sensitive detail" not in diagnostics

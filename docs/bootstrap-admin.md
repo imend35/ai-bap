@@ -40,3 +40,33 @@ SELECT EXISTS (
 
 This command does not replace the current public registration endpoint. That
 endpoint remains unchanged until a later, explicitly approved phase.
+
+## Render Free Startup Bootstrap
+
+For the separate [`render.free.yaml`](../render.free.yaml) demonstration path,
+I can establish the first administrator inside the API container without shell
+access or public database connectivity. This is a one-time, operator-approved
+startup action; it is not an HTTP endpoint and does not change the interactive
+local command described above.
+
+Before the approved first deployment only, I configure these values as
+temporary Render environment variables:
+
+- `AI_BAP_INITIAL_ADMIN_BOOTSTRAP_ENABLED=true`
+- `AI_BAP_INITIAL_ADMIN_EMAIL`
+- `AI_BAP_INITIAL_ADMIN_FULL_NAME`
+- `AI_BAP_INITIAL_ADMIN_PASSWORD` (a Render secret from my password manager)
+
+Only the exact lowercase value `true` enables this path. When enabled, all
+three administrator details are required and are validated with the normal
+registration rules. The startup sequence is migration, bootstrap, then API.
+The bootstrap adapter reuses the existing Argon2id hashing, active-admin
+advisory lock, and no-overwrite checks. It creates no account when an active
+administrator already exists.
+
+I never place those values in Git, `.env.example`, logs, browser requests, or
+chat. After a successful first administrator creation, I remove **all four**
+temporary values in the Render Dashboard and perform a controlled redeploy.
+If enabled configuration is incomplete, invalid, conflicts with an existing
+email, or encounters a database failure, startup exits nonzero and the API
+does not start.

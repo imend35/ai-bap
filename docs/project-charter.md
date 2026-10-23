@@ -112,13 +112,17 @@ content. I do not treat AI output as automatically approved work.
 | API contract | OpenAPI 3.1 |
 | Backend tests | Pytest and HTTPX |
 | Backend linting | Ruff |
-| Frontend quality | TypeScript/Vite build and Oxlint |
+| Frontend quality | Vitest, React Testing Library, TypeScript/Vite build, and Oxlint |
 | Authentication | JWT and Argon2id password hashing |
-| Containers | Docker Compose for PostgreSQL and isolated test databases |
+| Containers | Full-stack local Docker Compose and isolated test database configuration |
 | AI drafting | Optional OpenAI SDK integration configured by environment |
 
-Frontend automated tests, CI workflows, deployment, and a full application
-Compose topology are not currently configured.
+Frontend automated tests and GitHub Actions CI are implemented. The
+push-triggered CI run for commit `1e4333738947f131816901b9fdb71e4fff61d4f2`
+and the pull-request-triggered CI run for commit
+`d88973895dced732e6aa7f00e4da5847ed0ba3d4` completed successfully. The
+full-stack Compose configuration exists, but its runtime has not yet been
+verified. Continuous deployment and public deployment are not implemented.
 
 ## 9. Current Acceptance Position
 
@@ -137,18 +141,19 @@ documentation, and remaining limitations are reviewed together.
 | Test data reaches development data | The isolated PostgreSQL test procedure validates a separate database target before tests run. |
 | Secrets leak into source control | `.env` and common secret files are ignored; documentation uses placeholders only. |
 | External AI availability | Draft generation is optional and returns a controlled error when no API key is configured. |
-| Incomplete delivery automation | CI, deployment, and full-stack Compose remain explicitly documented limitations. |
+| Incomplete delivery automation | CI is verified for push and pull-request runs; continuous deployment, public deployment, and full-stack Compose runtime verification remain limitations. |
 
 ## 11. Deliverables
 
 I maintain the product specification, architecture document, README, OpenAPI
 contract, backend and frontend source, Alembic migrations, backend tests,
-Docker configuration, and operational guidance in this repository. Planned
-deployment, CI, frontend test, and agent-extension artifacts are not presented
-as completed deliverables.
+Docker configuration, and operational guidance in this repository. Implemented
+frontend tests and CI are documented as completed deliverables. Deployment,
+continuous delivery, and agent-extension artifacts are not presented as
+completed deliverables.
 
 ## 12. Next Step
 
 My next priority is final submission preparation: review the complete working
-tree, retain only intended artifacts, add any required frontend test and CI
-evidence, and verify the documented setup from a clean environment.
+tree, retain only intended artifacts, verify the isolated full-stack Compose
+runtime, and validate the documented setup from a clean environment.

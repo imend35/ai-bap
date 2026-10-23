@@ -149,6 +149,11 @@ available at `http://127.0.0.1:8000/api/v1/health`. Browser `/api/...` requests
 are proxied by nginx to FastAPI, so the containerized UI uses same-origin API
 routing.
 
+The full stack was also verified in a separate disposable Compose project with
+isolated loopback ports and a new PostgreSQL volume. That evidence is local
+runtime verification, not a public deployment; see
+[the Docker runtime report](docs/codex-reports/adm_8.10.82.md).
+
 All published ports bind to loopback only. PostgreSQL defaults to host port
 `5433`, FastAPI to `8000`, and the frontend to `8080`; change only the
 non-secret port values in `.env` when needed.
@@ -313,8 +318,19 @@ production build, and Oxlint. The backend job creates an ephemeral PostgreSQL
 applies Alembic through the guarded test wrapper, then runs Pytest and Ruff.
 It uses only synthetic CI credentials and never targets a development database.
 
-The workflow is implemented locally but requires a pushed branch or pull
-request before GitHub can provide remote execution evidence.
+Remote execution is verified for the push-triggered run on `main` and the
+pull-request-triggered run for [PR #1](https://github.com/imend35/ai-bap/pull/1).
+Both runs completed successfully. The documented PR run is available at
+<https://github.com/imend35/ai-bap/actions/runs/39826933174>.
+
+## Render Deployment Preparation
+
+[`render.yaml`](render.yaml) prepares a managed PostgreSQL database, Docker
+FastAPI web service, and static frontend for a reviewed Render deployment. It
+does not provision or deploy any service automatically. Review
+[the Render deployment guide](docs/deployment-render.md) before provisioning:
+it documents required configuration names, migration safeguards, CORS, the
+interactive administrator bootstrap, smoke tests, and recovery limits.
 
 ## Security Considerations
 
@@ -331,22 +347,22 @@ request before GitHub can provide remote execution evidence.
 
 ## Known Limitations
 
-- The repository has no public deployment evidence.
+- The repository has no public deployment evidence. Render configuration is
+  prepared but has not been provisioned or runtime-verified on Render.
 - CI provides validation only; continuous deployment and a public deployment
-  are not configured.
+  are not implemented.
 - Oxlint has 16 retained warnings and no errors; resolving them safely needs a
   separately scoped state-management refactor with frontend regression tests.
-- The Compose stack is local-only and has not been verified as a public
-  deployment topology.
+- Full-stack Compose is validated locally in an isolated disposable runtime,
+  but it is not production deployment evidence.
 - The optional AI draft generator depends on an explicitly configured OpenAI
   API key and external provider availability.
 
 ## Future Improvements
 
-- Add frontend component and workflow tests.
-- Add CI quality gates for backend tests, Ruff, frontend build, and Oxlint.
-- Document and implement a complete containerized application runtime and
-  deployment workflow.
+- Expand frontend component and workflow tests.
+- Add deployment-specific smoke tests and a reviewed continuous-deployment
+  strategy after public deployment is approved.
 - Refactor frontend loading state with regression coverage to address the
   retained Oxlint warnings.
 - Continue improving observability, operational documentation, and reviewable
