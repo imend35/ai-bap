@@ -289,13 +289,15 @@ def test_bootstrap_launcher_hides_unexpected_failure_details(
     monkeypatch.setattr(
         launcher,
         "bootstrap_initial_admin_from_environment",
-        lambda: (_ for _ in ()).throw(RuntimeError("sensitive bootstrap value")),
+        lambda: (_ for _ in ()).throw(Exception("synthetic-secret-like-value")),
     )
 
     assert launcher.main() == 1
-    output = capsys.readouterr().out
-    assert output == "Initial administrator bootstrap could not be completed.\n"
-    assert "sensitive bootstrap value" not in output
+    output = capsys.readouterr()
+    assert output.out == "Initial administrator bootstrap could not be completed.\n"
+    assert output.err == ""
+    assert "synthetic-secret-like-value" not in output.out
+    assert "synthetic-secret-like-value" not in output.err
 
 
 def test_no_public_bootstrap_route_or_openapi_contract_exists() -> None:

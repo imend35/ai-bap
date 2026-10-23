@@ -17,6 +17,22 @@ from scripts.bootstrap_admin import (
 )
 
 
+class FakePostgresDiagnostic:
+    """I provide only PostgreSQL constraint metadata for an isolated test."""
+
+    def __init__(self, constraint_name: str) -> None:
+        self.constraint_name = constraint_name
+
+
+class FakePostgresIntegrityError(Exception):
+    """I model the safe metadata used to classify a PostgreSQL constraint error."""
+
+    sqlstate = "23505"
+
+    def __init__(self, constraint_name: str) -> None:
+        self.diag = FakePostgresDiagnostic(constraint_name)
+
+
 class FakeSession:
     """I model the small SQLAlchemy session surface used by bootstrap logic."""
 
@@ -169,7 +185,11 @@ def test_bootstrap_rolls_back_integrity_error_without_exposing_it() -> None:
 
     session = FakeSession(
         scalar_results=[None, None],
-        commit_error=IntegrityError("INSERT", {}, Exception("duplicate")),
+        commit_error=IntegrityError(
+            "INSERT",
+            {},
+            FakePostgresIntegrityError("ix_users_email"),
+        ),
     )
 
     result = bootstrap_initial_admin(
@@ -180,6 +200,29 @@ def test_bootstrap_rolls_back_integrity_error_without_exposing_it() -> None:
     )
 
     assert result is BootstrapAdminResult.EMAIL_EXISTS
+    assert session.rollback_calls == 1
+
+
+def test_bootstrap_returns_generic_failure_for_an_unrelated_integrity_error() -> None:
+    """I fail closed without misreporting a different constraint as an email conflict."""
+
+    session = FakeSession(
+        scalar_results=[None, None],
+        commit_error=IntegrityError(
+            "INSERT",
+            {},
+            FakePostgresIntegrityError("uq_users_record_number"),
+        ),
+    )
+
+    result = bootstrap_initial_admin(
+        "admin@example.com",
+        "Initial Administrator",
+        "TestPassword123!",
+        session_factory=make_session_factory(session),
+    )
+
+    assert result is BootstrapAdminResult.FAILED
     assert session.rollback_calls == 1
 
 

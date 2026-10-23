@@ -30,6 +30,8 @@ INITIAL_ADMIN_ENVIRONMENT_VARIABLES = (
     INITIAL_ADMIN_FULL_NAME,
     INITIAL_ADMIN_PASSWORD,
 )
+POSTGRES_UNIQUE_VIOLATION_SQLSTATE = "23505"
+USERS_EMAIL_UNIQUE_INDEX = "ix_users_email"
 
 # I retain this public constant for bootstrap callers while sharing its identity.
 BOOTSTRAP_ADMIN_ADVISORY_LOCK_KEY = ACTIVE_ADMIN_LIFECYCLE_ADVISORY_LOCK_KEY
@@ -67,6 +69,22 @@ def classify_sqlalchemy_error(error: SQLAlchemyError) -> str:
     if isinstance(error, ProgrammingError):
         return "programming_error"
     return "sqlalchemy_error"
+
+
+def is_users_email_unique_violation(error: IntegrityError) -> bool:
+    """Return whether PostgreSQL identified the known users-email uniqueness index."""
+    original_error = error.orig
+    diagnostic = getattr(original_error, "diag", None)
+    sqlstate = getattr(original_error, "sqlstate", None) or getattr(
+        original_error,
+        "pgcode",
+        None,
+    )
+    constraint_name = getattr(diagnostic, "constraint_name", None)
+    return (
+        sqlstate == POSTGRES_UNIQUE_VIOLATION_SQLSTATE
+        and constraint_name == USERS_EMAIL_UNIQUE_INDEX
+    )
 
 
 def report_diagnostic(
@@ -145,7 +163,9 @@ def bootstrap_initial_admin(
                 diagnostic_reporter,
                 f"{phase}:{classify_sqlalchemy_error(error)}",
             )
-            return BootstrapAdminResult.EMAIL_EXISTS
+            if is_users_email_unique_violation(error):
+                return BootstrapAdminResult.EMAIL_EXISTS
+            return BootstrapAdminResult.FAILED
         except SQLAlchemyError as error:
             db.rollback()
             report_diagnostic(

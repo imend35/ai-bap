@@ -12,7 +12,7 @@ def main() -> int:
     """Return a safe process result for the Free startup wrapper."""
     try:
         result = bootstrap_initial_admin_from_environment()
-    except (RuntimeError, ValueError):
+    except Exception:
         print("Initial administrator bootstrap could not be completed.")
         return 1
 
