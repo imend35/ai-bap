@@ -17,8 +17,10 @@ COPY backend/alembic.ini ./alembic.ini
 COPY docker/backend/initialize_fresh_database.py /usr/local/bin/initialize_fresh_database.py
 COPY docker/backend/migrate_production.py /usr/local/bin/migrate_production.py
 COPY docker/backend/start_api.py /usr/local/bin/start_api.py
+COPY docker/backend/start_api_free.py /usr/local/bin/start_api_free.py
+COPY docker/backend/bootstrap_initial_admin_from_environment.py /usr/local/bin/bootstrap_initial_admin_from_environment.py
 
-RUN chown -R app:app /app /usr/local/bin/initialize_fresh_database.py /usr/local/bin/migrate_production.py /usr/local/bin/start_api.py
+RUN chown -R app:app /app /usr/local/bin/initialize_fresh_database.py /usr/local/bin/migrate_production.py /usr/local/bin/start_api.py /usr/local/bin/start_api_free.py /usr/local/bin/bootstrap_initial_admin_from_environment.py
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \
