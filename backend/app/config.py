@@ -1,4 +1,3 @@
-
 """I manage application configuration and environment settings."""
 
 from functools import lru_cache
@@ -34,9 +33,13 @@ class Settings(BaseSettings):
     public_registration_enabled: bool = Field(default=False)
 
     # I read AI service settings from environment variables.
-    # I allow the backend to run without an OpenAI API key.
+    # I allow the backend to run without an AI API key.
     openai_api_key: SecretStr | None = None
     openai_model: str = Field(default="gpt-4.1-mini")
+
+    # I support OpenAI-compatible AI providers through a configurable API URL.
+    # I retain the default OpenAI endpoint when no custom URL is configured.
+    openai_base_url: str | None = Field(default=None)
 
     # I restrict browser access to explicitly allowed frontend origins.
     cors_origins: list[str] = Field(
@@ -56,17 +59,13 @@ class Settings(BaseSettings):
     def database_url(self) -> URL:
         """I build the PostgreSQL connection URL safely."""
         if self.database_url_override is not None:
-            database_url = make_url(
-                self.database_url_override.get_secret_value()
-            )
+            database_url = make_url(self.database_url_override.get_secret_value())
             if database_url.get_backend_name() != "postgresql":
                 raise ValueError("DATABASE_URL must target PostgreSQL.")
             return database_url.set(drivername="postgresql+psycopg")
 
         if self.postgres_password is None:
-            raise RuntimeError(
-                "POSTGRES_PASSWORD is required when DATABASE_URL is unset."
-            )
+            raise RuntimeError("POSTGRES_PASSWORD is required when DATABASE_URL is unset.")
 
         return URL.create(
             drivername="postgresql+psycopg",

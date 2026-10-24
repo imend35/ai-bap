@@ -1,4 +1,3 @@
-
 """I generate validated user story drafts using the OpenAI API."""
 
 import json
@@ -42,15 +41,11 @@ class GeneratedUserStory(BaseModel):
         # I verify that every acceptance criterion contains meaningful text.
         for criterion in criteria:
             if not criterion.strip():
-                raise ValueError(
-                    "Acceptance criteria cannot be blank."
-                )
+                raise ValueError("Acceptance criteria cannot be blank.")
 
             # I enforce the length limit defined by the user story schema.
             if len(criterion) > 1000:
-                raise ValueError(
-                    "Each acceptance criterion must be at most 1000 characters."
-                )
+                raise ValueError("Each acceptance criterion must be at most 1000 characters.")
 
         return criteria
 
@@ -66,30 +61,22 @@ def extract_response_content(response: object) -> str:
     choices = getattr(response, "choices", None)
 
     if not isinstance(choices, list) or not choices:
-        raise AIGenerationError(
-            "AI returned an invalid response structure."
-        )
+        raise AIGenerationError("AI returned an invalid response structure.")
 
     # I verify that the first choice contains a message.
     message = getattr(choices[0], "message", None)
 
     if message is None:
-        raise AIGenerationError(
-            "AI returned an invalid response structure."
-        )
+        raise AIGenerationError("AI returned an invalid response structure.")
 
     # I verify that the message contains text rather than another data type.
     content = getattr(message, "content", None)
 
     if content is None or content == "":
-        raise AIGenerationError(
-            "AI returned an empty response."
-        )
+        raise AIGenerationError("AI returned an empty response.")
 
     if not isinstance(content, str):
-        raise AIGenerationError(
-            "AI returned an invalid response structure."
-        )
+        raise AIGenerationError("AI returned an invalid response structure.")
 
     return content
 
@@ -104,13 +91,8 @@ def generate_user_story(
     # I read the AI configuration from application settings.
     settings = get_settings()
 
-    if (
-        settings.openai_api_key is None
-        or not settings.openai_api_key.get_secret_value().strip()
-    ):
-        raise AIGenerationError(
-            "OpenAI API key is not configured."
-        )
+    if settings.openai_api_key is None or not settings.openai_api_key.get_secret_value().strip():
+        raise AIGenerationError("OpenAI API key is not configured.")
 
     # I construct the user prompt from untrusted requirement data.
     user_prompt = build_user_story_prompt(
@@ -123,6 +105,7 @@ def generate_user_story(
         # I initialize the OpenAI client without exposing credentials.
         client = OpenAI(
             api_key=settings.openai_api_key.get_secret_value(),
+            base_url=settings.openai_base_url,
             timeout=30.0,
             max_retries=1,
         )
@@ -158,6 +141,4 @@ def generate_user_story(
         ValidationError,
         ValueError,
     ) as exc:
-        raise AIGenerationError(
-            "AI user story generation failed."
-        ) from exc
+        raise AIGenerationError("AI user story generation failed.") from exc

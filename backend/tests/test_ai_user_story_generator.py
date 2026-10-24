@@ -1,4 +1,3 @@
-
 """I test AI-generated user story validation and error handling."""
 
 import json
@@ -24,10 +23,7 @@ def create_story(acceptance_criteria: list[str]) -> GeneratedUserStory:
     # I use a common user story draft across validation tests.
     return GeneratedUserStory(
         title="Secure User Login",
-        description=(
-            "As a user, I want to log in securely, "
-            "so that I can access my account."
-        ),
+        description=("As a user, I want to log in securely, so that I can access my account."),
         acceptance_criteria=acceptance_criteria,
     )
 
@@ -36,9 +32,7 @@ def test_valid_user_story() -> None:
     """I verify that a valid user story is accepted."""
 
     # I create a story with one valid acceptance criterion.
-    story = create_story(
-        ["Given valid credentials, when I log in, then access is granted."]
-    )
+    story = create_story(["Given valid credentials, when I log in, then access is granted."])
 
     assert story.title == "Secure User Login"
     assert len(story.acceptance_criteria) == 1
@@ -91,9 +85,7 @@ def test_missing_api_key_rejected(
     """I verify controlled failure when the API key is missing."""
 
     # I temporarily disable the API key in the test environment.
-    settings = user_story_generator.get_settings().model_copy(
-        update={"openai_api_key": None}
-    )
+    settings = user_story_generator.get_settings().model_copy(update={"openai_api_key": None})
 
     monkeypatch.setattr(
         user_story_generator,
@@ -145,13 +137,7 @@ def mocked_openai(
 def make_ai_response(content: str | None) -> SimpleNamespace:
     """I simulate an OpenAI chat completion response."""
 
-    return SimpleNamespace(
-        choices=[
-            SimpleNamespace(
-                message=SimpleNamespace(content=content)
-            )
-        ]
-    )
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 
 
 def run_generation() -> GeneratedUserStory:
@@ -172,18 +158,11 @@ def test_successful_ai_response(
     # I prepare a valid JSON response without calling the API.
     payload = {
         "title": "Secure Login",
-        "description": (
-            "As a user, I want to log in securely, "
-            "so that I can access my account."
-        ),
-        "acceptance_criteria": [
-            "Given valid credentials, when I log in, then access is granted."
-        ],
+        "description": ("As a user, I want to log in securely, so that I can access my account."),
+        "acceptance_criteria": ["Given valid credentials, when I log in, then access is granted."],
     }
 
-    mocked_openai.chat.completions.create.return_value = (
-        make_ai_response(json.dumps(payload))
-    )
+    mocked_openai.chat.completions.create.return_value = make_ai_response(json.dumps(payload))
 
     story = run_generation()
 
@@ -192,13 +171,9 @@ def test_successful_ai_response(
     assert story.acceptance_criteria == payload["acceptance_criteria"]
 
     # I verify that the generator requests JSON output.
-    request_kwargs = (
-        mocked_openai.chat.completions.create.call_args.kwargs
-    )
+    request_kwargs = mocked_openai.chat.completions.create.call_args.kwargs
 
-    assert request_kwargs["response_format"] == {
-        "type": "json_object"
-    }
+    assert request_kwargs["response_format"] == {"type": "json_object"}
 
 
 def test_api_connection_error(
@@ -212,9 +187,7 @@ def test_api_connection_error(
         "https://api.openai.com/v1/chat/completions",
     )
 
-    mocked_openai.chat.completions.create.side_effect = (
-        APIConnectionError(request=request)
-    )
+    mocked_openai.chat.completions.create.side_effect = APIConnectionError(request=request)
 
     with pytest.raises(
         AIGenerationError,
@@ -234,9 +207,7 @@ def test_api_timeout_error(
         "https://api.openai.com/v1/chat/completions",
     )
 
-    mocked_openai.chat.completions.create.side_effect = (
-        APITimeoutError(request=request)
-    )
+    mocked_openai.chat.completions.create.side_effect = APITimeoutError(request=request)
 
     with pytest.raises(
         AIGenerationError,
@@ -251,9 +222,7 @@ def test_invalid_json_response(
     """I verify that malformed AI JSON responses are rejected."""
 
     # I simulate malformed JSON returned by the model.
-    mocked_openai.chat.completions.create.return_value = (
-        make_ai_response('{"title": "Incomplete"')
-    )
+    mocked_openai.chat.completions.create.return_value = make_ai_response('{"title": "Incomplete"')
 
     with pytest.raises(
         AIGenerationError,
@@ -268,9 +237,7 @@ def test_empty_ai_response(
     """I verify that empty AI responses are rejected."""
 
     # I simulate an empty model response.
-    mocked_openai.chat.completions.create.return_value = (
-        make_ai_response(None)
-    )
+    mocked_openai.chat.completions.create.return_value = make_ai_response(None)
 
     with pytest.raises(
         AIGenerationError,
@@ -285,14 +252,12 @@ def test_invalid_ai_schema(
     """I verify that AI responses must match the expected schema."""
 
     # I simulate valid JSON with missing required fields.
-    mocked_openai.chat.completions.create.return_value = (
-        make_ai_response(
-            json.dumps(
-                {
-                    "title": "Secure Login",
-                    "acceptance_criteria": [],
-                }
-            )
+    mocked_openai.chat.completions.create.return_value = make_ai_response(
+        json.dumps(
+            {
+                "title": "Secure Login",
+                "acceptance_criteria": [],
+            }
         )
     )
 
@@ -301,6 +266,7 @@ def test_invalid_ai_schema(
         match="AI user story generation failed",
     ):
         run_generation()
+
 
 @pytest.mark.parametrize(
     "response",
@@ -311,11 +277,7 @@ def test_invalid_ai_schema(
         SimpleNamespace(choices=[SimpleNamespace(message=None)]),
         SimpleNamespace(choices=[SimpleNamespace()]),
         SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content={"title": "Invalid"})
-                )
-            ]
+            choices=[SimpleNamespace(message=SimpleNamespace(content={"title": "Invalid"}))]
         ),
     ],
 )
@@ -373,3 +335,54 @@ def test_openai_client_initialization_failure(
         match="AI user story generation failed",
     ):
         run_generation()
+
+
+def test_gemini_base_url_passed_to_ai_client(
+    monkeypatch: pytest.MonkeyPatch,
+    mocked_openai: MagicMock,
+) -> None:
+    """I verify that the generator passes the Gemini API URL to the client."""
+
+    gemini_base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    settings = user_story_generator.get_settings().model_copy(
+        update={
+            "openai_api_key": SecretStr("test-only-gemini-key"),
+            "openai_model": "gemini-2.5-flash",
+            "openai_base_url": gemini_base_url,
+        }
+    )
+    monkeypatch.setattr(
+        user_story_generator,
+        "get_settings",
+        lambda: settings,
+    )
+
+    client_arguments = {}
+
+    def capture_client_configuration(**kwargs: object) -> MagicMock:
+        client_arguments.update(kwargs)
+        return mocked_openai
+
+    monkeypatch.setattr(
+        user_story_generator,
+        "OpenAI",
+        capture_client_configuration,
+    )
+
+    payload = {
+        "title": "Secure Login",
+        "description": ("As a user, I want to log in securely, so that I can access my account."),
+        "acceptance_criteria": ["Given valid credentials, when I log in, then access is granted."],
+    }
+
+    mocked_openai.chat.completions.create.return_value = make_ai_response(json.dumps(payload))
+
+    story = run_generation()
+
+    assert story.title == "Secure Login"
+    assert client_arguments["base_url"] == gemini_base_url
+    assert client_arguments["api_key"] == "test-only-gemini-key"
+
+    request_arguments = mocked_openai.chat.completions.create.call_args.kwargs
+    assert request_arguments["model"] == "gemini-2.5-flash"
+    assert request_arguments["response_format"] == {"type": "json_object"}
