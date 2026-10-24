@@ -178,10 +178,11 @@ def test_successful_ai_response(
 
 def test_api_connection_error(
     mocked_openai: MagicMock,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """I verify that API connection failures are handled safely."""
+    """I verify that API connection failures are handled and logged safely."""
 
-    # I simulate an SDK connection failure.
+    # I simulate an SDK connection failure without a real API request.
     request = httpx.Request(
         "POST",
         "https://api.openai.com/v1/chat/completions",
@@ -189,11 +190,25 @@ def test_api_connection_error(
 
     mocked_openai.chat.completions.create.side_effect = APIConnectionError(request=request)
 
+    # I verify that the public-facing error remains controlled.
     with pytest.raises(
         AIGenerationError,
         match="AI user story generation failed",
     ):
         run_generation()
+
+    # I verify that only safe diagnostic metadata is logged.
+    assert len(caplog.records) == 1
+
+    record = caplog.records[0]
+
+    assert record.levelname == "ERROR"
+    assert "error_type=APIConnectionError" in record.getMessage()
+    assert "status_code=unknown" in record.getMessage()
+
+    # I ensure that no request details or exception traceback are logged.
+    assert "https://api.openai.com" not in record.getMessage()
+    assert record.exc_info is None
 
 
 def test_api_timeout_error(

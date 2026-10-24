@@ -1,6 +1,7 @@
 """I generate validated user story drafts using the OpenAI API."""
 
 import json
+import logging
 
 from openai import APIError, OpenAI
 from pydantic import (
@@ -16,6 +17,9 @@ from app.services.ai.user_story_prompt import (
     SYSTEM_PROMPT,
     build_user_story_prompt,
 )
+
+# I initialize a logger for safe AI service diagnostics.
+logger = logging.getLogger(__name__)
 
 
 class GeneratedUserStory(BaseModel):
@@ -141,4 +145,22 @@ def generate_user_story(
         ValidationError,
         ValueError,
     ) as exc:
+        # I log only safe diagnostic metadata without exposing sensitive data.
+        error_type = type(exc).__name__
+
+        if isinstance(exc, APIError):
+            status_code = getattr(exc, "status_code", None)
+
+            logger.error(
+                "AI generation failed: error_type=%s, status_code=%s",
+                error_type,
+                status_code if isinstance(status_code, int) else "unknown",
+            )
+        else:
+            logger.error(
+                "AI generation failed: error_type=%s",
+                error_type,
+            )
+
+        # I preserve the controlled error response for API consumers.
         raise AIGenerationError("AI user story generation failed.") from exc
