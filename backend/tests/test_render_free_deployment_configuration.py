@@ -63,6 +63,7 @@ def test_free_blueprint_uses_managed_database_and_public_api_references() -> Non
     api_environment = {variable["key"]: variable for variable in api["envVars"]}
     frontend_environment = {variable["key"]: variable for variable in frontend["envVars"]}
 
+    assert api_environment["PUBLIC_REGISTRATION_ENABLED"]["value"] == "false"
     assert api_environment["DATABASE_URL"]["fromDatabase"] == {
         "name": "ai-bap-free-postgres",
         "property": "connectionString",

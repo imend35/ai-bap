@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import Settings, get_settings
 from app.database import get_db
 from app.jwt_service import create_access_token
 from app.models.user import User
@@ -33,9 +34,17 @@ router = APIRouter(
 )
 def register_user(
     payload: UserRegister,
+    settings: Annotated[Settings, Depends(get_settings)],
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
     """I register a new user with a securely hashed password."""
+
+    # I fail closed before querying accounts or processing the password.
+    if not settings.public_registration_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Public registration is disabled.",
+        )
 
     # I normalize email addresses before checking for duplicates.
     normalized_email = str(payload.email).strip().lower()
