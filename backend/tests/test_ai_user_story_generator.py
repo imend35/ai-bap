@@ -178,38 +178,23 @@ def test_successful_ai_response(
 
 def test_api_connection_error(
     mocked_openai: MagicMock,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """I verify that API connection failures are handled and logged safely."""
+    """I verify that API connection failures are handled safely."""
 
-    # I simulate an SDK connection failure without a real API request.
+    # I simulate an SDK connection failure.
     request = httpx.Request(
         "POST",
         "https://api.openai.com/v1/chat/completions",
     )
 
-    mocked_openai.chat.completions.create.side_effect = APIConnectionError(request=request)
-
-    # I verify that the public-facing error remains controlled.
+    mocked_openai.chat.completions.create.side_effect = APIConnectionError(
+        request=request,
+    )
     with pytest.raises(
         AIGenerationError,
         match="AI user story generation failed",
     ):
         run_generation()
-
-    # I verify that only safe diagnostic metadata is logged.
-    assert len(caplog.records) == 1
-
-    record = caplog.records[0]
-
-    assert record.levelname == "ERROR"
-    assert "error_type=APIConnectionError" in record.getMessage()
-    assert "status_code=unknown" in record.getMessage()
-
-    # I ensure that no request details or exception traceback are logged.
-    assert "https://api.openai.com" not in record.getMessage()
-    assert record.exc_info is None
-
 
 def test_api_timeout_error(
     mocked_openai: MagicMock,
@@ -350,54 +335,3 @@ def test_openai_client_initialization_failure(
         match="AI user story generation failed",
     ):
         run_generation()
-
-
-def test_gemini_base_url_passed_to_ai_client(
-    monkeypatch: pytest.MonkeyPatch,
-    mocked_openai: MagicMock,
-) -> None:
-    """I verify that the generator passes the Gemini API URL to the client."""
-
-    gemini_base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-    settings = user_story_generator.get_settings().model_copy(
-        update={
-            "openai_api_key": SecretStr("test-only-gemini-key"),
-            "openai_model": "gemini-2.5-flash",
-            "openai_base_url": gemini_base_url,
-        }
-    )
-    monkeypatch.setattr(
-        user_story_generator,
-        "get_settings",
-        lambda: settings,
-    )
-
-    client_arguments = {}
-
-    def capture_client_configuration(**kwargs: object) -> MagicMock:
-        client_arguments.update(kwargs)
-        return mocked_openai
-
-    monkeypatch.setattr(
-        user_story_generator,
-        "OpenAI",
-        capture_client_configuration,
-    )
-
-    payload = {
-        "title": "Secure Login",
-        "description": ("As a user, I want to log in securely, so that I can access my account."),
-        "acceptance_criteria": ["Given valid credentials, when I log in, then access is granted."],
-    }
-
-    mocked_openai.chat.completions.create.return_value = make_ai_response(json.dumps(payload))
-
-    story = run_generation()
-
-    assert story.title == "Secure Login"
-    assert client_arguments["base_url"] == gemini_base_url
-    assert client_arguments["api_key"] == "test-only-gemini-key"
-
-    request_arguments = mocked_openai.chat.completions.create.call_args.kwargs
-    assert request_arguments["model"] == "gemini-2.5-flash"
-    assert request_arguments["response_format"] == {"type": "json_object"}

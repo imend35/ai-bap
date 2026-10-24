@@ -37,11 +37,7 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_model: str = Field(default="gpt-4.1-mini")
 
-    # I support OpenAI-compatible AI providers through a configurable API URL.
-    # I retain the default OpenAI endpoint when no custom URL is configured.
-    openai_base_url: str | None = Field(default=None)
-
-    # I restrict browser access to explicitly allowed frontend origins.
+        # I restrict browser access to explicitly allowed frontend origins.
     cors_origins: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:5173",

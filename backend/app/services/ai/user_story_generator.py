@@ -109,7 +109,6 @@ def generate_user_story(
         # I initialize the OpenAI client without exposing credentials.
         client = OpenAI(
             api_key=settings.openai_api_key.get_secret_value(),
-            base_url=settings.openai_base_url,
             timeout=30.0,
             max_retries=1,
         )
