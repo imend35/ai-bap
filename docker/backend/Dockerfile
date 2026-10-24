@@ -23,6 +23,7 @@ COPY docker/backend/bootstrap_initial_admin_from_environment.py /usr/local/bin/b
 RUN chown -R app:app /app /usr/local/bin/initialize_fresh_database.py /usr/local/bin/migrate_production.py /usr/local/bin/start_api.py /usr/local/bin/start_api_free.py /usr/local/bin/bootstrap_initial_admin_from_environment.py
 
 ENV PATH="/app/.venv/bin:${PATH}" \
+    PYTHONPATH="/app" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
