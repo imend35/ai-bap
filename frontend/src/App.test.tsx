@@ -30,6 +30,15 @@ const archivedTestProject = {
   },
 };
 
+const testBusinessAnalyst = {
+  id: "analyst-1",
+  record_number: "USR-002",
+  email: "analyst@example.test",
+  full_name: "Test Analyst",
+  role: "business_analyst",
+  is_active: true,
+};
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -45,6 +54,14 @@ function mockAuthenticatedSession(
   fetchMock: ReturnType<typeof vi.fn>,
   projectsResponse: (url: string) => Response | Promise<Response> = () =>
     paginatedResponse(),
+  currentUser = {
+    id: "admin-1",
+    record_number: "USR-001",
+    email: "admin@example.test",
+    full_name: "Test Admin",
+    role: "admin",
+    is_active: true,
+  },
 ) {
   fetchMock.mockImplementation(async (input) => {
     const url = String(input);
@@ -52,14 +69,7 @@ function mockAuthenticatedSession(
       return jsonResponse({ access_token: "test-token", token_type: "bearer" });
     }
     if (url.endsWith("/api/v1/auth/me")) {
-      return jsonResponse({
-        id: "admin-1",
-        record_number: "USR-001",
-        email: "admin@example.test",
-        full_name: "Test Admin",
-        role: "admin",
-        is_active: true,
-      });
+      return jsonResponse(currentUser);
     }
     if (url.includes("/api/v1/projects")) return projectsResponse(url);
     return paginatedResponse();
@@ -72,6 +82,15 @@ async function signInAsTestAdmin() {
   await user.type(screen.getByLabelText("Password"), "synthetic-test-password");
   await user.click(screen.getByRole("button", { name: /sign in/i }));
   expect(await screen.findByText(/Test Admin.*USR-001.*Admin/)).toBeVisible();
+  return user;
+}
+
+async function signInAsTestBusinessAnalyst() {
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Email address"), testBusinessAnalyst.email);
+  await user.type(screen.getByLabelText("Password"), "synthetic-test-password");
+  await user.click(screen.getByRole("button", { name: /sign in/i }));
+  expect(await screen.findByText(/Test Analyst.*USR-002.*Business Analyst/)).toBeVisible();
   return user;
 }
 
@@ -182,6 +201,38 @@ describe("AI BAP authentication and workspace", () => {
     expect(screen.queryByRole("button", { name: "Archive Archived Portal" })).not.toBeInTheDocument();
   });
 
+  it("allows business analysts to edit active projects but hides admin-only archive actions", async () => {
+    const fetchMock = vi.mocked(fetch);
+    mockAuthenticatedSession(
+      fetchMock,
+      (url) =>
+        url.includes("archived=true")
+          ? paginatedResponse([archivedTestProject])
+          : paginatedResponse([testProject]),
+      testBusinessAnalyst,
+    );
+    render(<App />);
+
+    const user = await signInAsTestBusinessAnalyst();
+    await user.click(screen.getByRole("button", { name: /projects/i }));
+
+    expect(
+      screen.getByRole("heading", { name: "All Projects" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Show")).toBeVisible();
+    expect(await screen.findByText("Customer Portal")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit Customer Portal" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Archive Customer Portal" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Restore Customer Portal" })).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Show"), "archived");
+
+    expect(await screen.findByText("Archived Portal")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Edit Archived Portal" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Archive Archived Portal" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Restore Archived Portal" })).not.toBeInTheDocument();
+  });
+
   it("shows project-list loading feedback until the pending request resolves", async () => {
     const fetchMock = vi.mocked(fetch);
     let resolveProjects!: (response: Response) => void;
@@ -195,6 +246,10 @@ describe("AI BAP authentication and workspace", () => {
 
     const user = await signInAsTestAdmin();
     await user.click(screen.getByRole("button", { name: /projects/i }));
+    expect(
+      screen.getByRole("heading", { name: "All Projects" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Show")).toBeVisible();
     expect(screen.getByText("Loading projects...")).toBeVisible();
 
     await act(async () => {
