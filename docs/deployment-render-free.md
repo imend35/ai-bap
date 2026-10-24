@@ -40,7 +40,10 @@ See the current provider limits before provisioning:
    or frontend build variables.
 5. After the static frontend URL is known, provide `CORS_ORIGINS` as a JSON
    list containing only that exact HTTPS origin. Do not use a wildcard.
-6. Deploy only after a Human Product Owner authorizes provisioning and billing
+6. Keep `PUBLIC_REGISTRATION_ENABLED=false`. Public account creation is not
+   appropriate for the shared demo workspace. Login remains available for
+   deliberately provisioned, active accounts.
+7. Deploy only after a Human Product Owner authorizes provisioning and billing
    review.
 
 ## Migration-Before-Start Behavior
@@ -87,12 +90,32 @@ Immediately after successful first creation, remove all four values in the
 Render Dashboard and trigger a controlled redeploy. The application never
 attempts to alter Render environment configuration itself.
 
+After bootstrap, use an authorized admin-only mechanism to provision only the
+least-privileged business-analyst account(s) required for the demonstration.
+Never publish the administrator or demo credentials. Share demo credentials
+only with explicitly authorized evaluators through a private channel; never
+place them in Git, the README, frontend environment variables, browser bundles,
+or public URLs.
+
+Use a dedicated fresh demonstration database containing synthetic data only.
+Before public exposure, verify that no unauthorized existing accounts are
+present; disabling registration does not revoke accounts already in the
+database. All provisioned business analysts share the demonstration workspace.
+This configuration does not provide tenant isolation, so do not use real or
+confidential data. If arbitrary untrusted visitors need publicly posted login
+credentials, this shared-workspace design is insufficient and must not be
+represented as safe for that use case. Login throttling or account lockout has
+not been established and remains a residual risk.
+
 ## Required Environment Variables
 
 - `DATABASE_URL`: supplied by the managed database reference; secret.
 - `JWT_SECRET_KEY`: generated and stored by Render; secret.
 - `CORS_ORIGINS`: operator-supplied JSON list of exact frontend HTTPS origins.
 - `PORT`: configured for the API service by the Blueprint.
+- `PUBLIC_REGISTRATION_ENABLED`: keep `false` for the controlled public demo;
+  the application default is also `false`. Enable only in an isolated local
+  development environment when registration behavior is specifically needed.
 - `VITE_API_BASE_URL`: public API URL reference used only during static-site
   build; it is public, not a secret.
 
@@ -121,6 +144,11 @@ The startup bootstrap code is implemented and tested locally, but no Render
 service has been provisioned. A Human Product Owner must separately approve
 the temporary Render-secret lifecycle, then verify creation and mandatory
 secret removal with disposable data during an authorized runtime test.
+
+Registration protection is implemented at the API boundary as well as
+configured in this Free Blueprint. Render provisioning and deployment still
+require separate Human Product Owner authorization; this documentation does
+not authorize either action.
 
 ## Recovery
 

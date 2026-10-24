@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", pattern="^HS256$")
     jwt_access_token_expire_minutes: int = Field(default=30, ge=1)
 
+    # I disable anonymous account creation unless an operator opts in.
+    public_registration_enabled: bool = Field(default=False)
+
     # I read AI service settings from environment variables.
     # I allow the backend to run without an OpenAI API key.
     openai_api_key: SecretStr | None = None

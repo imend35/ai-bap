@@ -32,6 +32,39 @@ The exact isolated target and test-only shell setup are documented in
 [isolated-test-database.md](isolated-test-database.md). The development
 database is never an acceptable fallback.
 
+## Isolated Browser End-to-End Test
+
+The repository includes one Playwright browser journey at
+`frontend/e2e/authenticated-project.spec.ts`. It is intentionally separate
+from Vitest and runs only against a newly created, disposable Docker Compose
+project. The Playwright configuration requires an explicit loopback-only
+`AI_BAP_E2E_BASE_URL` and literal `AI_BAP_E2E_ISOLATED=true`; it refuses a
+non-loopback target. Synthetic account credentials are supplied only through
+the calling process. Screenshots, traces, and videos are disabled by default.
+
+The verified ADIM 8.10.168 execution used real local Google Chrome and a
+fresh Compose project with loopback-only PostgreSQL, API, and frontend ports.
+It verified all of the following:
+
+- PostgreSQL health, successful migration, FastAPI health, frontend health,
+  and same-origin API proxy health.
+- Registration and UI login for a synthetic least-privileged
+  business-analyst account.
+- Projects navigation, project form completion, submission, and visible
+  `role="status"` success feedback.
+- Project visibility in the UI, browser reload, normal reauthentication, and
+  retrieval of the persisted project after reload.
+- A count-only PostgreSQL check scoped to the synthetic E2E project prefix.
+- Ownership-verified removal of the disposable containers, network, volume,
+  project image tags, and generated Playwright artifact, with the existing
+  `ai-bap-rubric-test` stack preserved.
+
+The result was **1 passed in 4.2 seconds**. This is isolated local browser
+evidence only. It does not verify every product workflow, public deployment,
+production HTTPS, continuous deployment, telemetry, alerting, or on-call
+response. See [ADIM 8.10.168](codex-reports/adm_8.10.168.md) for the complete
+sanitized execution record.
+
 ## Unified Runner
 
 From the repository root, run:
@@ -86,12 +119,16 @@ uv run --no-sync ruff check app tests migrations/versions
 
 ## Current Limitations
 
-- Frontend coverage begins with authentication and project behavior; requirement,
-  user-story, task, sprint, and archive-action flows need additional coverage.
+- Browser E2E coverage currently verifies one authenticated project workflow;
+  requirement, user-story, task, sprint, archive-action, and role-specific
+  workflows need additional coverage.
 - Backend integration execution requires an operator-prepared isolated
   PostgreSQL target and test-only password for every run; the latest unified
   execution met those requirements and passed.
-- The unified runner intentionally excludes Docker, migrations, and deployment.
+- The unified runner intentionally excludes Docker, migrations, and browser
+  E2E. The browser journey has a separate, explicitly isolated Compose
+  procedure and must never target a shared, development, or production
+  database.
 - Push-triggered CI for commit `1e4333738947f131816901b9fdb71e4fff61d4f2` and
   pull-request-triggered CI for commit `d88973895dced732e6aa7f00e4da5847ed0ba3d4`
   both completed successfully. CI does not provide continuous deployment.

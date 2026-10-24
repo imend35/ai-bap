@@ -82,3 +82,24 @@ Modified:
 Run an approved isolated full-stack Docker Compose verification, capture the
 health and smoke-test evidence, and then update the rubric assessment without
 claiming deployment or CD capability.
+
+## Final Follow-Up CI Verification — ADIM 8.10.79
+
+The latest Pull Request #1 workflow run verified the CI result for the
+documentation commit that followed the initial PR evidence record.
+
+- Pull request: <https://github.com/imend35/ai-bap/pull/1>
+- Workflow run: <https://github.com/imend35/ai-bap/actions/runs/39829093581>
+- Run ID: `39829093581`
+- Event: `pull_request`
+- Head commit: `e4f9da65b5ec383dba4233b2f83907af016e38fb`
+- Workflow status and conclusion: `completed` / `success`
+- Backend quality job: `success`; Pytest reported 511 passed and Ruff reported
+  all checks passed.
+- Frontend quality job: `success`; lint reported 0 errors and 16 warnings.
+- The frontend test step succeeded. A test count is not recorded here because
+  it was not independently confirmed from this run's log.
+
+This follow-up confirms successful CI execution for the latest PR commit. It
+does not provide evidence of continuous deployment, public deployment, or a
+verified full-stack Docker Compose runtime.

@@ -1,0 +1,31 @@
+name: ai-bap-regression-disposable-20261024-a202
+
+services:
+  db:
+    image: postgres:16
+    container_name: ai-bap-regression-disposable-20261024-a202-db-1
+    restart: "no"
+    labels:
+      com.ai-bap.test.target: disposable-regression
+      com.ai-bap.test.owner: human-product-owner
+    environment:
+      POSTGRES_DB: ai_bap_regression_20261024
+      POSTGRES_USER: ai_bap_regression_bootstrap_20261024
+      POSTGRES_PASSWORD_FILE: /run/secrets/regression_bootstrap_password
+      PGDATA: /var/lib/postgresql/regression-data
+    secrets:
+      - regression_bootstrap_password
+    ports:
+      - "127.0.0.1:55435:5432"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ai_bap_regression_bootstrap_20261024 -d ai_bap_regression_20261024
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+secrets:
+  regression_bootstrap_password:
+    file: ${AI_BAP_REGRESSION_BOOTSTRAP_SECRET_FILE:?Set a protected local bootstrap secret file path.}
