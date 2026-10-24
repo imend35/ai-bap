@@ -5,9 +5,41 @@ projects, requirements, user stories, delivery tasks, and sprints in one
 traceable workflow. It uses a React frontend, a FastAPI backend, PostgreSQL,
 SQLAlchemy, Alembic, and an OpenAPI contract.
 
-The application is under active development and is not publicly deployed.
-GitHub Actions validates the frontend and backend on pushes and pull requests
-to `main`; deployment automation is not configured.
+The application is under active development and is available as a short-term
+public demonstration on Render Free. The demo is for evaluation with synthetic
+data, not a production service. GitHub Actions validates the frontend and
+backend on pushes and pull requests to `main`; deployments are manually
+controlled and continuous deployment is not configured.
+
+## Live Demo
+
+- **Frontend:** [ai-bap-frontend-free.onrender.com](https://ai-bap-frontend-free.onrender.com)
+- **API health:** [ai-bap-api-free.onrender.com/api/v1/health](https://ai-bap-api-free.onrender.com/api/v1/health)
+- **Repository:** [github.com/imend35/ai-bap](https://github.com/imend35/ai-bap)
+
+The demo uses a Render Free static frontend, FastAPI web service, and
+PostgreSQL database. Free web services spin down after 15 minutes without
+incoming HTTP or WebSocket traffic; the first request after inactivity may
+take about a minute while the service starts. See [Render's current Free
+instance limitations](https://render.com/docs/free) before evaluating.
+
+## Reviewer Quick Start
+
+1. Open the [live frontend](https://ai-bap-frontend-free.onrender.com). If the
+   API has been idle, allow time for its Render Free instance to wake.
+2. Check the [API health endpoint](https://ai-bap-api-free.onrender.com/api/v1/health).
+3. Sign in only with evaluator credentials supplied privately by the project
+   owner. No public demo credentials are published here. Public registration is
+   disabled; do not assume anonymous access or attempt to create an account.
+4. Use synthetic project and requirement data only. From an authorized session,
+   review the project dashboard, requirements, story workflow, tasks, sprints,
+   and traceability views available to that account's role.
+5. To inspect AI-assisted story generation, select a requirement and request a
+   generated story. The result is an unsaved draft. Review and edit its story
+   text and acceptance criteria, then explicitly confirm that review before
+   saving. The saved story remains a draft and follows the separate review and
+   approval workflow. AI generation depends on the configured provider and may
+   be unavailable if that provider is not configured or reachable.
 
 ## Project Overview
 
@@ -26,9 +58,10 @@ approval, and traceability difficult. AI BAP provides a structured workspace
 for capturing requirements, creating and reviewing user stories, assigning
 tasks and sprints, and inspecting the resulting delivery chain.
 
-An optional OpenAI-backed draft-generation adapter can generate a user-story
-draft from a requirement. Generated content remains a draft: a human reviewer
-must approve or reject it through the protected API workflow.
+An optional OpenAI-backed adapter generates a user-story draft from a
+requirement without persisting it. The reviewer must inspect and edit the draft,
+then explicitly confirm human review before saving. The saved story begins in
+Draft status; approval or rejection is a separate protected review action.
 
 ## Implemented Features
 
@@ -278,11 +311,13 @@ npm run build
 npm run lint
 ```
 
-The latest recorded backend verification passed 511 tests, and Ruff passed.
-The frontend TypeScript/Vite production build passes. Oxlint currently reports
-16 warnings and no errors; these warnings concern synchronous state updates in
-dependency-driven data-loading effects. Frontend automated tests use Vitest
-with mocked API responses and cover the initial authentication/project flows.
+A local backend verification recorded **589 tests passed**. This is local
+execution evidence, not a claim about the latest GitHub Actions result; check
+the workflow run and its head commit before attributing a CI result to a
+particular revision. Frontend Vitest tests use mocked API responses, and the
+TypeScript/Vite production build and Oxlint are part of the frontend checks.
+A previously recorded lint run reported 16 warnings and no errors; consult the
+current run output for the present warning count.
 
 ### Unified test execution
 
@@ -318,19 +353,21 @@ production build, and Oxlint. The backend job creates an ephemeral PostgreSQL
 applies Alembic through the guarded test wrapper, then runs Pytest and Ruff.
 It uses only synthetic CI credentials and never targets a development database.
 
-Remote execution is verified for the push-triggered run on `main` and the
-pull-request-triggered run for [PR #1](https://github.com/imend35/ai-bap/pull/1).
-Both runs completed successfully. The documented PR run is available at
-<https://github.com/imend35/ai-bap/actions/runs/39826933174>.
+For remote results, inspect the [GitHub Actions workflow runs](https://github.com/imend35/ai-bap/actions)
+and confirm that each run's head SHA matches the revision being evaluated.
+Historical successful runs do not establish the status of a newer commit. The
+local 589-test result above is not presented as a GitHub Actions result.
 
-## Render Deployment Preparation
+## Render Free Deployment
 
-[`render.yaml`](render.yaml) prepares a managed PostgreSQL database, Docker
-FastAPI web service, and static frontend for a reviewed Render deployment. It
-does not provision or deploy any service automatically. Review
-[the Render deployment guide](docs/deployment-render.md) before provisioning:
-it documents required configuration names, migration safeguards, CORS, the
-interactive administrator bootstrap, smoke tests, and recovery limits.
+The live demo uses the separate [`render.free.yaml`](render.free.yaml)
+configuration for managed PostgreSQL, a Docker-based FastAPI web service, and
+a static frontend. Automatic deployment triggers are disabled; a repository
+change should not be interpreted as an automatic demo update. The paid
+[`render.yaml`](render.yaml) is a separate configuration. See the
+[Render Free deployment guide](docs/deployment-render-free.md) for configuration,
+migration safeguards, CORS, registration policy, administrator bootstrap,
+validation, and recovery limits.
 
 ## Security Considerations
 
@@ -342,28 +379,55 @@ interactive administrator bootstrap, smoke tests, and recovery limits.
   administrator passwords on a command line.
 - The backend validates external input, hashes passwords, checks JWT identity,
   enforces server-side roles, and protects archived projects from writes.
-- Treat user requirements and AI output as untrusted input. AI drafts require
-  human review before approval.
+- Public self-registration is disabled in the Render Free configuration;
+  protected features require authorized login. Never place evaluator
+  credentials in this README, the frontend bundle, or public URLs.
+- Treat user requirements and AI output as untrusted input. Generated stories
+  are not saved until a human has reviewed and explicitly confirmed them.
+
+## Evaluation Evidence
+
+- [Agent team specification](docs/agent-team.md) and
+  [agent workflow](docs/agent-workflow.md)
+- [Product specification](product-spec.md),
+  [project charter](docs/project-charter.md), and
+  [architecture](docs/architecture.md)
+- [Task tracker plan](docs/github-issues-plan.md) and
+  [GitHub Issue #2](https://github.com/imend35/ai-bap/issues/2)
+- [Agent development instructions](AGENTS.md)
+- [Backend tests](backend/tests/) and the
+  [frontend test suite](frontend/src/App.test.tsx)
+- [API contract](openapi.yaml)
+- Docker configuration: [full-stack Compose](compose.yaml),
+  [isolated test Compose](compose.test.yaml), and
+  [disposable regression Compose](compose.regression-test.yaml)
+- Render configuration and instructions:
+  [Free Blueprint](render.free.yaml) and
+  [deployment guide](docs/deployment-render-free.md)
+- [GitHub Actions CI workflow](.github/workflows/ci.yml)
 
 ## Known Limitations
 
-- The repository has no public deployment evidence. Render configuration is
-  prepared but has not been provisioned or runtime-verified on Render.
-- CI provides validation only; continuous deployment and a public deployment
-  are not implemented.
-- Oxlint has 16 retained warnings and no errors; resolving them safely needs a
-  separately scoped state-management refactor with frontend regression tests.
-- Full-stack Compose is validated locally in an isolated disposable runtime,
-  but it is not production deployment evidence.
+- The Render Free demo is intended for evaluation, not production use. Free
+  services may restart or spin down, and the associated free database has
+  provider-specific retention limits; see the deployment guide and current
+  Render documentation.
+- CI provides validation; automatic continuous deployment is not configured.
+- Correlated end-to-end observability, user-impact alerting, and an on-call
+  responder agent are not established and are not claimed.
+- A prior Oxlint run reported 16 warnings and no errors. Review current output
+  before treating that count as current.
+- Full-stack Compose has local runtime evidence, but that is not production
+  deployment evidence.
 - The optional AI draft generator depends on an explicitly configured OpenAI
   API key and external provider availability.
 
 ## Future Improvements
 
 - Expand frontend component and workflow tests.
-- Add deployment-specific smoke tests and a reviewed continuous-deployment
-  strategy after public deployment is approved.
-- Refactor frontend loading state with regression coverage to address the
-  retained Oxlint warnings.
-- Continue improving observability, operational documentation, and reviewable
-  security evidence.
+- Add and maintain deployment-specific smoke tests; any continuous-deployment
+  strategy requires separate review and evidence.
+- Refactor frontend loading state with regression coverage to address lint
+  warnings after confirming the current findings.
+- Improve correlated observability, user-impact alerting, and on-call
+  procedures before making operational-readiness claims.
