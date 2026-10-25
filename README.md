@@ -34,12 +34,22 @@ instance limitations](https://render.com/docs/free) before evaluating.
 4. Use synthetic project and requirement data only. From an authorized session,
    review the project dashboard, requirements, story workflow, tasks, sprints,
    and traceability views available to that account's role.
-5. To inspect AI-assisted story generation, select a requirement and request a
-   generated story. The result is an unsaved draft. Review and edit its story
-   text and acceptance criteria, then explicitly confirm that review before
-   saving. The saved story remains a draft and follows the separate review and
-   approval workflow. AI generation depends on the configured provider and may
-   be unavailable if that provider is not configured or reachable.
+5. In the inspected local implementation, the backend denies live AI-generation
+   requests for the exact identities `banlyst@example.com` and
+   `reviwer@example.com`, and the frontend disables their Generate control.
+   Regression tests for this behavior are present in the repository, but their
+   execution is not verified here, and the restriction's deployment and
+   enforcement on Render have not been verified. Do not assume these accounts
+   are active or usable. Business Analysts can still create User Stories
+   manually, and Reviewers can review and approve or reject them. Both roles can
+   inspect saved stories and acceptance criteria. The current data model does
+   not record reliable AI-generation provenance, so particular saved stories
+   are not identified as AI-generated. Authorized non-demo Business Analysts
+   and administrators retain the AI-generation workflow when the configured
+   provider is reachable; generated content is an unsaved draft that must be
+   reviewed before saving.
+
+**Complete User Guide:** For detailed instructions covering every screen, button, role, and end-to-end workflow, see the [AI BAP User Guide](docs/USER_GUIDE.md).
 
 ## Project Overview
 
