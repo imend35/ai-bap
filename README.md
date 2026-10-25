@@ -50,19 +50,26 @@ deploy the Render services.
 
 ## Reviewer Access and Demo Accounts
 
-The following identities are referenced by the implementation, but their
-existence and successful login in the live Render environment are **NOT
-VERIFIED**. Do not assume that either account is active or usable.
+Reviewers can explore AI BAP using the live application and these dedicated
+demo identities:
 
-| Intended role | Login identifier | Live account status |
-|---|---|---|
-| Business Analyst | `banlyst@example.com` | NOT VERIFIED |
-| Reviewer | `reviwer@example.com` | NOT VERIFIED |
+**Live Application:** https://ai-bap-frontend-free.onrender.com
 
-No passwords or access tokens are published here. If accounts are provisioned
-and security-checked, the Product Owner must supply credentials privately.
-Public registration is disabled in the Render Free configuration; visitors
-must not assume anonymous access or attempt to register.
+| Role | Email |
+|---|---|
+| Business Analyst | `banlyst@example.com` |
+| Reviewer | `reviwer@example.com` |
+
+The Product Owner reports that both roles have previously passed live-login
+verification. This is historical verification and does not guarantee current
+account availability. The Product Owner provides credentials privately; they
+must be rotated before being shared again. No passwords or access tokens are
+published here. Public registration is disabled in the Render Free
+configuration; visitors must not assume anonymous access or attempt to
+register.
+
+Render Free may require additional startup time after inactivity. Allow for a
+cold start before retrying a login or page load.
 
 The application has a **shared workspace**, not per-reviewer project or tenant
 isolation. Accounts may see and, according to role, change the same records.
@@ -76,7 +83,7 @@ delete existing records during evaluation.
 
 | Step | What to inspect | Evidence boundary |
 |---|---|---|
-| 1. Open the application and sign in | Visit the live frontend, allow for a possible cold start, then sign in with authorized credentials. | The owner reports Admin login passed at `75833f9`; reviewer-account login is not verified. |
+| 1. Open the application and sign in | Visit the live frontend, allow for a possible cold start, then sign in with authorized credentials. | The owner reports both demo roles previously passed live-login verification; current availability has not been independently rechecked. |
 | 2. Review the Dashboard | Inspect the project list and available project summary. | Dashboard was reported to load for the Admin smoke test. Other role-specific live views were not reported. |
 | 3. Open the sample project | Find **Digital Loan Origination Platform**. | The Product Owner reports this project was created during the smoke journey. |
 | 4. Inspect requirements | Review REQ-002, REQ-003, and REQ-004 and their descriptions. | Creation was reported. No additional requirement editing or validation outcome is claimed. |
