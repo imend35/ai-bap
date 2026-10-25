@@ -1,6 +1,6 @@
 # AI BAP User Guide
 
-AI BAP is a shared workspace for connecting projects, requirements, User Stories, review decisions, sprints, and delivery tasks. This guide describes the interface and permissions implemented in the repository. Production availability can differ until the corresponding revision is deployed and verified.
+AI BAP is a shared workspace for connecting projects, requirements, User Stories, review decisions, sprints, and delivery tasks. This guide describes the interface and permissions in the repository. The Product Owner confirms that Render's backend and frontend are deployed at revision `75833f9`; only the live checks listed in [Reported deployment smoke checks](#reported-deployment-smoke-checks) are evidenced here. Other production behavior is not independently verified by this guide.
 
 ## Contents
 
@@ -14,6 +14,7 @@ AI BAP is a shared workspace for connecting projects, requirements, User Stories
 - [Delivery](#delivery)
 - [Pagination, loading, empty, and error states](#pagination-loading-empty-and-error-states)
 - [Public demo and data safety](#public-demo-and-data-safety)
+- [Reported deployment smoke checks](#reported-deployment-smoke-checks)
 - [Known hosting limitations](#known-hosting-limitations)
 - [Screenshot plan](#screenshot-plan)
 
@@ -302,9 +303,31 @@ For an authorized account where the provider is configured and available, the im
 
 Generation returns an unsaved draft; it is not automatically persisted or approved. Human review is required before saving an AI-generated draft. AI content remains a draft subject to the normal review workflow.
 
-In the inspected local implementation, live generation is disabled for the exact designated demo identities `banlyst@example.com` and `reviwer@example.com`. The frontend disables the action and the backend rejects direct requests. This restriction has **not yet been verified in production**. Public demo Business Analysts can create stories manually, and Reviewers can review, approve, or reject stories. Authorized non-demo Business Analysts and Admins may generate drafts when the provider is configured and reachable.
+Revision `75833f9`, reported as deployed to Render, disables the Generate action in the frontend and rejects direct backend generation requests for the exact identities `banlyst@example.com` and `reviwer@example.com`. The recorded smoke journey did not test these identities or attempt generation, so live enforcement remains **NOT VERIFIED**. Do not assume the accounts are active or usable. Business Analysts can create stories manually, and Reviewers can review, approve, or reject stories. Authorized non-demo Business Analysts and Admins may generate drafts when the provider is configured and reachable.
 
 The current data model does not establish reliable provenance for saved stories. Do not describe a saved story as AI-generated unless that fact has been independently verified. BYOK (bring your own key) is not supported or planned for this demo.
+
+## Reported deployment smoke checks
+
+The Product Owner reports that the backend and frontend were deployed at
+`75833f9` and supplied the following live smoke-test results. These results
+were not rerun as part of this documentation update:
+
+- The backend health request to `https://ai-bap-api-free.onrender.com/api/v1/health`
+  returned `{"status":"healthy"}`.
+- Admin login and the Dashboard passed.
+- The **Digital Loan Origination Platform** project was created; requirements
+  REQ-002, REQ-003, and REQ-004 were created.
+- US-002 and US-003 were created and linked to their corresponding
+  requirements.
+- A third story was reported saved for REQ-004, but AC-08 and AC-09 were
+  omitted and its generated ID was not supplied. Its completeness and identity
+  therefore remain unverified.
+- Persistence and traceability checks passed for REQ-002 and US-002.
+
+No additional live test outcome is implied. The checked-in FastAPI route,
+Render health-check setting, and Product Owner-confirmed live health request
+all use `/api/v1/health`. See [the final submission report](FINAL_SUBMISSION_REPORT.md).
 
 ## Known hosting limitations
 

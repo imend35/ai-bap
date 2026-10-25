@@ -1,287 +1,319 @@
 # AI BAP — AI-Powered Business Analysis Platform
 
-AI BAP is a full-stack business-analysis workspace that I built to connect
-projects, requirements, user stories, delivery tasks, and sprints in one
-traceable workflow. It uses a React frontend, a FastAPI backend, PostgreSQL,
-SQLAlchemy, Alembic, and an OpenAPI contract.
+### From Requirements to Intelligent Delivery
 
-The application is under active development and is available as a short-term
-public demonstration on Render Free. The demo is for evaluation with synthetic
-data, not a production service. GitHub Actions validates the frontend and
-backend on pushes and pull requests to `main`; deployments are manually
-controlled and continuous deployment is not configured.
+I built AI BAP to connect business requirements with reviewable User Stories,
+acceptance criteria, delivery tasks, and sprint planning. Optional AI-assisted
+drafting can help prepare a story, while human review and approval remain part
+of the workflow. Project dashboards and traceability views make the path from a
+business need to delivery work easier to inspect.
+
+[![Continuous Integration](https://github.com/imend35/ai-bap/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/imend35/ai-bap/actions/workflows/ci.yml)
+
+## Navigation
+
+[Live demo](#live-demo) · [Reviewer access](#reviewer-access-and-demo-accounts) ·
+[Evaluation walkthrough](#five-minute-evaluation-walkthrough) ·
+[Features](#implemented-functionality) ·
+[Architecture](#architecture-and-technology) ·
+[Rubric evidence](#official-capstone-rubric-evidence) ·
+[Testing](#testing-and-quality-assurance) ·
+[Local setup](#local-setup-and-docker) ·
+[Deployment](#deployment-and-operations) ·
+[Security and limitations](#security-and-known-limitations) ·
+[Documentation](#documentation-and-further-reading) ·
+[Submission](#submission-and-peer-review)
 
 ## Live Demo
 
-- **Frontend:** [ai-bap-frontend-free.onrender.com](https://ai-bap-frontend-free.onrender.com)
-- **API health:** [ai-bap-api-free.onrender.com/api/v1/health](https://ai-bap-api-free.onrender.com/api/v1/health)
+- **Live application:** [ai-bap-frontend-free.onrender.com](https://ai-bap-frontend-free.onrender.com)
+- **Verified API health:** [ai-bap-api-free.onrender.com/api/v1/health](https://ai-bap-api-free.onrender.com/api/v1/health)
+- **User Guide:** [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+- **Final Submission Report:** [docs/FINAL_SUBMISSION_REPORT.md](docs/FINAL_SUBMISSION_REPORT.md)
+- **GitHub Actions:** [workflow runs](https://github.com/imend35/ai-bap/actions)
 - **Repository:** [github.com/imend35/ai-bap](https://github.com/imend35/ai-bap)
 
-The demo uses a Render Free static frontend, FastAPI web service, and
-PostgreSQL database. Free web services spin down after 15 minutes without
-incoming HTTP or WebSocket traffic; the first request after inactivity may
-take about a minute while the service starts. See [Render's current Free
-instance limitations](https://render.com/docs/free) before evaluating.
+The Product Owner confirmed that the backend and frontend are deployed at
+`75833f9`, using Docker, with `/api/v1/health` as the Render health-check path.
+The live API health request returned `{"status":"healthy"}`. This is
+Product-Owner-confirmed deployment evidence; no deployment was performed for
+this documentation update.
 
-## Reviewer Quick Start
+The demo runs on Render Free. A sleeping web service may take time to wake on
+the first request after inactivity. Allow for a cold start before retrying a
+login or page load. Free-plan service, database lifecycle, and recovery limits
+are described in [the deployment guide](docs/deployment-render-free.md) and
+[Render's current Free-instance documentation](https://render.com/docs/free).
 
-1. Open the [live frontend](https://ai-bap-frontend-free.onrender.com). If the
-   API has been idle, allow time for its Render Free instance to wake.
-2. Check the [API health endpoint](https://ai-bap-api-free.onrender.com/api/v1/health).
-3. Sign in only with evaluator credentials supplied privately by the project
-   owner. No public demo credentials are published here. Public registration is
-   disabled; do not assume anonymous access or attempt to create an account.
-4. Use synthetic project and requirement data only. From an authorized session,
-   review the project dashboard, requirements, story workflow, tasks, sprints,
-   and traceability views available to that account's role.
-5. In the inspected local implementation, the backend denies live AI-generation
-   requests for the exact identities `banlyst@example.com` and
-   `reviwer@example.com`, and the frontend disables their Generate control.
-   Regression tests for this behavior are present in the repository, but their
-   execution is not verified here, and the restriction's deployment and
-   enforcement on Render have not been verified. Do not assume these accounts
-   are active or usable. Business Analysts can still create User Stories
-   manually, and Reviewers can review and approve or reject them. Both roles can
-   inspect saved stories and acceptance criteria. The current data model does
-   not record reliable AI-generation provenance, so particular saved stories
-   are not identified as AI-generated. Authorized non-demo Business Analysts
-   and administrators retain the AI-generation workflow when the configured
-   provider is reachable; generated content is an unsaved draft that must be
-   reviewed before saving.
+**Deployment is manual.** A push to GitHub or a successful CI run does not
+deploy the Render services.
 
-**Complete User Guide:** For detailed instructions covering every screen, button, role, and end-to-end workflow, see the [AI BAP User Guide](docs/USER_GUIDE.md).
+## Reviewer Access and Demo Accounts
 
-## Project Overview
+The following identities are referenced by the implementation, but their
+existence and successful login in the live Render environment are **NOT
+VERIFIED**. Do not assume that either account is active or usable.
 
-I use AI BAP to turn business requirements into reviewable delivery work while
-preserving a visible path from requirement to user story to task. The API and
-UI support project-level dashboard and traceability views, as well as a
-controlled user-story review workflow.
+| Intended role | Login identifier | Live account status |
+|---|---|---|
+| Business Analyst | `banlyst@example.com` | NOT VERIFIED |
+| Reviewer | `reviwer@example.com` | NOT VERIFIED |
 
-The product scope is defined in [product-spec.md](product-spec.md). The
-implementation contract is [openapi.yaml](openapi.yaml).
+No passwords or access tokens are published here. If accounts are provisioned
+and security-checked, the Product Owner must supply credentials privately.
+Public registration is disabled in the Render Free configuration; visitors
+must not assume anonymous access or attempt to register.
 
-## Problem Statement and Solution
+The application has a **shared workspace**, not per-reviewer project or tenant
+isolation. Accounts may see and, according to role, change the same records.
+Use synthetic data only. Avoid modifying or archiving another participant's
+work; the walkthrough below is intended to be read-only.
 
-Business requirements often live separately from delivery tasks, making review,
-approval, and traceability difficult. AI BAP provides a structured workspace
-for capturing requirements, creating and reviewing user stories, assigning
-tasks and sprints, and inspecting the resulting delivery chain.
+## Five-Minute Evaluation Walkthrough
 
-An optional OpenAI-backed adapter generates a user-story draft from a
-requirement without persisting it. The reviewer must inspect and edit the draft,
-then explicitly confirm human review before saving. The saved story begins in
-Draft status; approval or rejection is a separate protected review action.
+Use only credentials explicitly provided by the Product Owner. Do not edit or
+delete existing records during evaluation.
 
-## Implemented Features
+| Step | What to inspect | Evidence boundary |
+|---|---|---|
+| 1. Open the application and sign in | Visit the live frontend, allow for a possible cold start, then sign in with authorized credentials. | The owner reports Admin login passed at `75833f9`; reviewer-account login is not verified. |
+| 2. Review the Dashboard | Inspect the project list and available project summary. | Dashboard was reported to load for the Admin smoke test. Other role-specific live views were not reported. |
+| 3. Open the sample project | Find **Digital Loan Origination Platform**. | The Product Owner reports this project was created during the smoke journey. |
+| 4. Inspect requirements | Review REQ-002, REQ-003, and REQ-004 and their descriptions. | Creation was reported. No additional requirement editing or validation outcome is claimed. |
+| 5. Inspect User Stories | Review US-002 and US-003 and their parent requirement relationships. | Creation/linkage was reported. A third REQ-004 story was reported saved, but its ID is unavailable and AC-08/AC-09 were omitted. |
+| 6. Review acceptance criteria and traceability | Follow the requirement-to-story links and inspect available criteria. | Persistence and traceability checks were reported as passed for REQ-002 and US-002 only. |
+| 7. Inspect Delivery | Review tasks and sprints if present and available to the account's role. | This workflow was not included in the supplied live smoke results. Do not create or reassign items as part of this read-only walkthrough. |
+| 8. Review story decisions | Depending on role, inspect review status and approval/rejection actions or audit history. | Role behavior is implemented and described in the User Guide; live reviewer approval was not reported as tested. |
+| 9. Consult the full guide | Open [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for screen-level instructions and role details. | The guide distinguishes UI behavior from backend-only API permissions. |
 
-- JWT registration, login, and current-user profile endpoints.
-- Role-protected administrator user management.
-- Project creation, listing, detail, update, archive, and restore operations.
-- Archive-aware project lists, dashboards, and traceability reads.
-- Read-only protection for archived projects and their related write
-  operations; projects must be restored before work can change again.
-- Requirement, user-story, task, and sprint CRUD workflows.
-- User-story review, approval, rejection, and immutable approval-audit
-  identity snapshots.
-- Requirement → user story → task traceability and project dashboard counts.
-- PostgreSQL-backed immutable readable record numbers and creator metadata.
-- OpenAPI contract-alignment tests and guarded isolated PostgreSQL test
-  database support.
+The smoke-test outcomes above were supplied by the Product Owner; they were not
+repeated during this README update. See the [final evidence report](docs/FINAL_SUBMISSION_REPORT.md)
+for the full record and limitations.
 
-## Authentication, Authorization, and User Roles
+## Business Problem and Solution
 
-The backend issues signed JWT bearer tokens after successful login. Passwords
-are hashed with Argon2id; password hashes and JWT signing secrets are never
-returned by the API.
+Business analysis work can be fragmented across documents and delivery tools.
+That fragmentation can make it harder to keep requirements consistent, define
+acceptance criteria, review proposed stories, preserve approval history, and
+understand how delivery work maps back to business needs. Preparing stories
+manually also takes effort, while unreviewed generated content is not suitable
+for direct approval.
 
-The implemented roles are:
+AI BAP provides one structured workspace for projects, requirements, User
+Stories, acceptance criteria, review decisions, tasks, and sprints. It connects
+those records through requirement-to-story-to-task traceability and project
+dashboards. An optional AI adapter can draft a User Story from a requirement;
+the result remains an unsaved draft until a person reviews it and explicitly
+confirms the review before saving. AI BAP does not claim quantified productivity
+gains.
 
-- `admin`: manages administrator accounts and can archive or restore projects.
-- `business_analyst`: creates and updates business-analysis and delivery
-  content where the route permits it.
-- `reviewer`: reads authorized project data and performs user-story approval
-  and rejection decisions.
+See the [Product Specification](product-spec.md) and
+[Project Charter](docs/project-charter.md) for scope and acceptance criteria.
 
-The backend enforces route-level permissions with `require_roles`; UI controls
-are not the security boundary. See the operation-specific requirements in
-[openapi.yaml](openapi.yaml).
+## Implemented Functionality
 
-## Architecture and Technology Stack
+### Authentication and authorization
 
-| Area | Implementation |
-| --- | --- |
-| Frontend | React 19, TypeScript, Vite |
-| Backend | Python 3.13+, FastAPI, Pydantic Settings |
-| Persistence | PostgreSQL 16, SQLAlchemy 2.x |
-| Schema migrations | Alembic |
-| Authentication | JWT with PyJWT; Argon2id password hashing |
-| API contract | OpenAPI 3.1 in `openapi.yaml` |
-| Backend quality | Pytest, HTTPX, Ruff |
-| Frontend quality | Vitest, React Testing Library, TypeScript build, Oxlint |
-| Optional AI integration | OpenAI Python SDK, configured by environment |
+- JWT-based sign-in, profile retrieval, and backend-enforced roles:
+  `admin`, `business_analyst`, and `reviewer`.
+- Administrator user management is available through protected API routes;
+  the current React UI does not provide a user-administration screen.
+- Public self-registration is disabled in the Render Free configuration.
 
-The main [compose.yaml](compose.yaml) runs the frontend, FastAPI backend, and
-PostgreSQL as one local Compose application. The direct backend and Vite
-commands below remain useful for focused development.
+### Business analysis and project management
 
-## Repository Structure
+- Create, list, view, and update projects; Admins can archive and restore.
+- Create and view requirements in the React interface. The backend supports
+  requirement updates for Admin and Business Analyst roles, but the current UI
+  has no requirement-edit control.
+- Manually create User Stories and acceptance criteria, save drafts, and submit
+  stories for review.
+- Reviewers and Admins can approve or reject reviewable stories; recorded
+  decisions have audit history.
+- The UI supports sprint creation/listing and task creation, status changes,
+  and sprint assignment. It does not expose general saved-story editing, sprint
+  editing, or task title/description editing. Some update operations exist at
+  the authenticated API layer; see the User Guide and OpenAPI contract.
 
-```text
-ai-bap/
-├── backend/
-│   ├── app/                 # FastAPI routes, models, schemas, and services
-│   ├── migrations/          # Alembic environment and revisions
-│   ├── scripts/             # Guarded database and bootstrap helpers
-│   ├── tests/               # Unit and API integration tests
-│   └── pyproject.toml
-├── frontend/
-│   ├── src/                 # React application
-│   └── package.json
-├── docker/                  # Test and migration-rehearsal support files
-├── docs/                    # Architecture and operational documentation
-├── compose.yaml             # Full local frontend, API, and PostgreSQL stack
-├── compose.test.yaml        # Isolated PostgreSQL test service
-├── openapi.yaml             # Checked-in API contract
-└── product-spec.md          # Product scope and acceptance criteria
+### AI-assisted drafting
+
+- Authorized, non-demo Business Analysts and Admins can request an optional
+  OpenAI-backed draft when a provider key is configured and the provider is
+  available.
+- Draft generation does not save or approve the story. Human review is
+  required before saving.
+- The source at `75833f9` contains backend denial and a disabled frontend
+  Generate control for `banlyst@example.com` and `reviwer@example.com`. Focused
+  local tests passed in ADIM 8.10.592 (six backend cases and twelve frontend
+  App tests); the supplied live smoke test did not test these identities or
+  generation. **Production enforcement is NOT VERIFIED.**
+- Saved-story provenance is not reliably established by the current data
+  model; this README does not label any particular saved story AI-generated.
+  BYOK is not supported.
+
+## Realistic Banking Demonstration
+
+The Product Owner reports the following synthetic business-analysis records
+were used in the live smoke journey for the **Digital Loan Origination
+Platform**:
+
+| Record | Name or relationship | Evidence status |
+|---|---|---|
+| Project | Digital Loan Origination Platform | Reported created |
+| REQ-002 | Enable Digital Personal Loan Applications | Reported created |
+| REQ-003 | Enable Automated Personal Loan Eligibility Assessment | Reported created |
+| REQ-004 | Enable Controlled Loan Approval and Authorization Workflow | Reported created |
+| US-002 | Submit a Digital Personal Loan Application | Reported created and linked to its requirement |
+| US-003 | Assess Personal Loan Eligibility Automatically | Reported created and linked to its requirement |
+| Third User Story | Saved under REQ-004; generated ID not supplied | Reported saved; AC-08 and AC-09 omitted; identity/completeness not verified |
+
+The demonstrated business flow is:
+
+`Loan Application → Eligibility Assessment → Approval Workflow`
+
+This is a synthetic business-analysis example only. It is not connected to a
+real bank, loan-origination platform, credit bureau, or financial service.
+
+## Architecture and Technology
+
+```mermaid
+flowchart LR
+    People[Business Analysts, Reviewers, Admins] --> UI[React + TypeScript + Vite]
+    UI -->|HTTPS / JSON, JWT bearer auth| API[FastAPI REST API]
+    API --> Auth[Authentication and role checks]
+    API --> Domain[Routes, schemas, and domain services]
+    Domain --> ORM[SQLAlchemy]
+    ORM --> DB[(PostgreSQL)]
+    ORM -. schema evolution .-> Alembic[Alembic migrations]
+    Domain -. optional eligible draft request .-> AI[OpenAI adapter]
+    CI[GitHub Actions CI] --> Repo[GitHub main]
+    Owner[Product Owner] -. manual deployment .-> Render[Render Free services]
 ```
 
-## Prerequisites
+| Area | Technology or boundary |
+|---|---|
+| Frontend | React, TypeScript, Vite |
+| Backend | Python, FastAPI, Pydantic |
+| Persistence | PostgreSQL, SQLAlchemy, Alembic |
+| Authentication | JWT; Argon2id password hashing |
+| API contract | OpenAPI 3.1 in [openapi.yaml](openapi.yaml) |
+| Local containerization | Docker Compose for frontend, API, database, and guarded migration initialization |
+| Continuous integration | GitHub Actions tests, build, and lint on pull requests and pushes to `main` |
+| Hosted demo | Render Free managed PostgreSQL, Docker FastAPI service, and static frontend; deployment is manual |
+| Optional AI | OpenAI SDK adapter; requires backend-side provider configuration and is not enabled for the designated demo identities in the inspected source |
 
-- Python 3.13 or later
-- [uv](https://docs.astral.sh/uv/)
+## Official Capstone Rubric Evidence
+
+This is a conservative self-assessment, not an official course grade. Evidence
+and limitations are detailed in the [Final Submission Report](docs/FINAL_SUBMISSION_REPORT.md).
+The rubric requires 10/24 points to pass, but the separate peer-review
+requirement below must also be completed.
+
+| Criterion | Maximum Points | Conservative Estimate | Evidence | Limitations |
+|---|---:|---:|---|---|
+| Problem Description | 2 | **2** | [Problem and solution](#business-problem-and-solution) | No measured productivity claim is made. |
+| Product Specification | 2 | **1** | [Product spec](product-spec.md), [GitHub Issue #2](https://github.com/imend35/ai-bap/issues/2) | Public issue has acceptance criteria, but historical agent use of the tracker is not evidenced. |
+| Agent Team Specification | 2 | **2** | [Agent team](docs/agent-team.md), [agent workflow](docs/agent-workflow.md) | Defined human-directed roles are not claimed to be autonomous independent agents. |
+| Context Management | 2 | **2** | [AGENTS.md](AGENTS.md) and its [modular project context](AGENTS.md#modular-context-documents) | Documentation is the evidence; it does not prove every contributor followed it. |
+| Application | 2 | **2** | [Backend](backend/app/), [frontend](frontend/src/), [Compose](compose.yaml), [runtime evidence](docs/codex-reports/adm_8.10.82.md), [browser workflow evidence](docs/codex-reports/adm_8.10.168.md) | Live smoke coverage is selective; one reported REQ-004 story is incomplete and unidentified. |
+| Testing | 2 | **2** | [Testing strategy](docs/testing-strategy.md), [test runner](scripts/test-all.ps1), [CI workflow](.github/workflows/ci.yml), [target CI run](https://github.com/imend35/ai-bap/actions/runs/40175160244) | Local 589-backend-test result is not the CI count or a fresh run; broader frontend workflow coverage remains incomplete. |
+| Containerization | 2 | **2** | [Compose configuration](compose.yaml), [isolated runtime report](docs/codex-reports/adm_8.10.82.md) | Runtime report is local disposable-environment evidence, not production evidence. |
+| Deployment | 2 | **2** | [Live application](https://ai-bap-frontend-free.onrender.com), [API health](https://ai-bap-api-free.onrender.com/api/v1/health), [Render deployment guide](docs/deployment-render-free.md) | Free hosting has lifecycle limits; deployment is manually controlled. |
+| CI/CD | 3 | **1** | [CI workflow](.github/workflows/ci.yml), [GitHub Actions](https://github.com/imend35/ai-bap/actions) | CI runs; automatic deployment and verified development CD are not implemented. |
+| Observability | 2 | **1** | [Final evidence audit](docs/FINAL_SUBMISSION_REPORT.md) | Published revision has logs but lacks verified correlated metrics/traces collected and viewable in a UI. Local draft/configuration is not runtime evidence. |
+| Alerting on User Impact | 1 | **0** | [Final evidence audit](docs/FINAL_SUBMISSION_REPORT.md) | No verified user-impact alert or trigger. |
+| On-Call Agent | 2 | **0** | [Agent workflow](docs/agent-workflow.md), [final evidence audit](docs/FINAL_SUBMISSION_REPORT.md) | Incident-response guidance exists; no alert-triggered agent that fixes an issue is implemented and demonstrated. |
+| **Total** | **24** | **17/24** | Conservative evidence estimate | Not an official grade; three peer reviews remain mandatory. |
+
+## Testing and Quality Assurance
+
+AI BAP has backend unit and integration tests, mocked frontend tests, an
+isolated browser E2E project-creation journey, Ruff, frontend lint, and a
+production build. Database-backed test workflows use isolated targets and
+fail-closed guards; do not point tests at development or production databases.
+
+- A local backend run recorded **589 tests passed**. This is a local result,
+  not a current GitHub Actions count.
+- GitHub Actions run [40175160244](https://github.com/imend35/ai-bap/actions/runs/40175160244)
+  is associated with commit `75833f9`; its Backend quality and Frontend quality
+  jobs completed successfully. That run is the revision-specific CI evidence.
+- The previous isolated Playwright report verifies one authenticated local
+  project creation/persistence journey; it does not cover every workflow or
+  production behavior.
+- Broader UI workflow coverage remains a limitation. Review the
+  [Testing Strategy](docs/testing-strategy.md) and test files for exact scope.
+
+## Local Setup and Docker
+
+### Prerequisites
+
+- Python 3.13 or later and [uv](https://docs.astral.sh/uv/)
 - Node.js and npm
-- Docker Desktop with Docker Compose, for the complete local stack
+- Docker Desktop with Docker Compose for the complete stack
 
-## Environment Configuration
+### Configure a local environment
 
-Copy the root example file before starting the development database:
+From the repository root, create a local environment file from the safe
+template, then set local-only PostgreSQL values and a securely generated JWT
+signing key. Never commit `.env`, real credentials, or provider keys.
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Set non-placeholder local database values in `.env`, then add the required
-backend JWT setting. Use a securely generated value; never commit `.env`.
+The optional OpenAI adapter uses a backend environment secret such as
+`OPENAI_API_KEY`; do not put it in frontend variables or tracked files. The
+frontend accepts `VITE_API_BASE_URL` for its API origin and otherwise uses the
+local development default.
 
-```dotenv
-JWT_SECRET_KEY=<a-local-secret-of-at-least-32-characters>
-```
-
-The backend reads PostgreSQL settings and `JWT_SECRET_KEY` from the root
-`.env`. The optional AI generator additionally reads `OPENAI_API_KEY` and
-optionally `OPENAI_MODEL`; without an API key, AI draft generation returns a
-controlled configuration error. The frontend defaults to
-`http://127.0.0.1:8000` and can be pointed elsewhere with
-`VITE_API_BASE_URL`.
-
-## Full-Stack Docker Compose Setup
-
-Copy the safe example before the first local startup and replace its placeholder
-database password and JWT signing key. Never commit `.env`.
+### Start the full local stack
 
 ```powershell
-Copy-Item .env.example .env
 docker compose up --build -d
 ```
 
-The command starts four local services: PostgreSQL (`db`), the one-shot
-fresh-database initializer (`migrate`), FastAPI (`api`), and nginx-hosted React
-assets (`frontend`). Open `http://localhost:8080`; the API health endpoint is
-available at `http://127.0.0.1:8000/api/v1/health`. Browser `/api/...` requests
-are proxied by nginx to FastAPI, so the containerized UI uses same-origin API
-routing.
+This starts the PostgreSQL `db`, one-shot `migrate` initializer, FastAPI `api`,
+and nginx-hosted `frontend`. Open `http://localhost:8080`; local API health is
+`http://127.0.0.1:8000/api/v1/health`. Browser `/api/...` requests are proxied
+to the backend. Published ports bind to loopback by default.
 
-The full stack was also verified in a separate disposable Compose project with
-isolated loopback ports and a new PostgreSQL volume. That evidence is local
-runtime verification, not a public deployment; see
-[the Docker runtime report](docs/codex-reports/adm_8.10.82.md).
+The initializer is restricted to a fresh empty application schema and exits
+without applying migrations if it detects existing public tables. For safety,
+verify database targets before manual Alembic commands. The
+[isolated database guide](docs/isolated-test-database.md) is mandatory for
+database-backed tests.
 
-All published ports bind to loopback only. PostgreSQL defaults to host port
-`5433`, FastAPI to `8000`, and the frontend to `8080`; change only the
-non-secret port values in `.env` when needed.
-
-### Fresh database initialization safety
-
-The `migrate` service applies Alembic only when the Compose database has an
-empty `public` schema and `AI_BAP_INITIALIZE_FRESH_DATABASE=true`. If it sees
-any existing public table, it exits without applying a migration. This prevents
-the Compose startup path from upgrading an existing persistent database.
-
-For an existing database, review its target and run the documented Alembic
-procedure manually. Do not use the development database for automated
-integration tests; use the isolated test procedure below instead.
-
-### Health checks and shutdown
+To inspect and stop the local stack:
 
 ```powershell
 docker compose ps
-Invoke-WebRequest http://127.0.0.1:8000/api/v1/health
 docker compose down
 ```
 
-`docker compose down` stops the stack but retains the named PostgreSQL volume.
-Do not add `--volumes` unless intentionally discarding a disposable local
-database.
+`docker compose down` retains the named database volume. Do not add `--volumes`
+unless intentionally discarding a disposable local database. See
+[Docker configuration](compose.yaml) and the
+[isolated Compose runtime report](docs/codex-reports/adm_8.10.82.md).
 
-### Troubleshooting
+For non-sensitive diagnostics, inspect `docker compose ps` and use
+`docker compose logs migrate`, `docker compose logs api`, or
+`docker compose logs frontend`. If `migrate` detects existing public tables,
+it intentionally exits without changing that database. If a loopback port is
+occupied, set an unused `POSTGRES_PORT`, `API_PORT`, or `FRONTEND_PORT` in the
+local `.env`, then restart the intended local project. Never copy credentials
+or database connection strings into issue comments or reports.
 
-- If `migrate` reports an existing database, it intentionally made no schema
-  change. Review the target and use the manual Alembic workflow.
-- If a loopback port is busy, set `POSTGRES_PORT`, `API_PORT`, or
-  `FRONTEND_PORT` to an unused local port in `.env` and restart.
-- Use `docker compose logs migrate`, `docker compose logs api`, or
-  `docker compose logs frontend` for non-sensitive diagnostics. Never copy
-  credentials into issue comments or reports.
+### Run components directly
 
-## Alembic Database Migrations
-
-Install the backend environment, then inspect and apply migrations from the
-`backend` directory:
+For focused backend development, with the verified local database migrated:
 
 ```powershell
 Set-Location backend
 uv sync --extra dev
-uv run alembic current
-uv run alembic upgrade head
-```
-
-The current migration chain includes the record-number formatting correction
-revision `c8d9e0f1a2b3`. Alembic obtains its connection configuration from the
-application settings, so `alembic upgrade head` must be run only after the
-development database target has been verified.
-
-### Isolated test database
-
-Database-backed tests use a separate Compose project, database, volume, port,
-and test-only credentials. Follow
-[docs/isolated-test-database.md](docs/isolated-test-database.md) exactly.
-That procedure sets fail-closed environment checks before the test suite or
-guarded test Alembic wrapper is used:
-
-```powershell
-Set-Location backend
-uv run python scripts/run_isolated_test_alembic.py upgrade head
-```
-
-This command is for the confirmed isolated test target only; it is not a
-replacement for development-database migrations.
-
-## Running the FastAPI Backend
-
-With the development database migrated and the backend environment installed:
-
-```powershell
-Set-Location backend
 uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The backend exposes its health endpoint at
-`http://127.0.0.1:8000/api/v1/health`.
-
-## Running the React Frontend
-
-In a second terminal:
+For the frontend, in a second terminal:
 
 ```powershell
 Set-Location frontend
@@ -289,155 +321,119 @@ npm ci
 npm run dev
 ```
 
-Vite prints the local frontend URL, normally `http://localhost:5173`. The
-default backend CORS configuration permits the standard Vite localhost origins.
+Vite normally serves on `http://localhost:5173`. Its API origin can be
+configured with `VITE_API_BASE_URL`; the backend's CORS allowlist must include
+the exact local origin.
 
-## API Documentation
+When the API is running, FastAPI serves interactive documentation at
+`http://127.0.0.1:8000/docs` and its runtime OpenAPI schema at
+`http://127.0.0.1:8000/openapi.json`. The checked-in contract is
+[openapi.yaml](openapi.yaml).
 
-The checked-in [openapi.yaml](openapi.yaml) is the API contract. When the
-backend is running, FastAPI also provides interactive documentation at
-`http://127.0.0.1:8000/docs` and the runtime schema at
-`http://127.0.0.1:8000/openapi.json`.
+### Migrations and tests
 
-Implemented API groups include health, authentication, administrator users,
-projects, requirements, user stories, user-story approvals/audit history,
-tasks, and sprints. Consult the contract for request bodies, responses,
-authorization requirements, pagination, and error responses.
-
-## Testing and Code Quality
-
-Backend database tests require the isolated environment described above. From
-`backend`, the verification commands are:
+Manual Alembic commands must target an inspected, authorized development
+database. Never run them against a shared or production database by accident:
 
 ```powershell
-uv run --no-sync pytest -q --tb=short
-uv run --no-sync ruff check app tests migrations/versions
+Set-Location backend
+uv run alembic current
+uv run alembic upgrade head
 ```
 
-Frontend verification commands, from `frontend`, are:
-
-```powershell
-npm run build
-npm run lint
-```
-
-A local backend verification recorded **589 tests passed**. This is local
-execution evidence, not a claim about the latest GitHub Actions result; check
-the workflow run and its head commit before attributing a CI result to a
-particular revision. Frontend Vitest tests use mocked API responses, and the
-TypeScript/Vite production build and Oxlint are part of the frontend checks.
-A previously recorded lint run reported 16 warnings and no errors; consult the
-current run output for the present warning count.
-
-### Unified test execution
-
-From the repository root, run:
+The database-backed test suite requires the explicitly isolated PostgreSQL
+environment in [docs/isolated-test-database.md](docs/isolated-test-database.md).
+The repository-root runner is:
 
 ```powershell
 .\scripts\test-all.ps1
 ```
 
-The runner executes the mocked frontend Vitest suite first. It then runs
-backend Pytest only when the current shell has the exact isolated PostgreSQL
-test configuration described in
-[docs/isolated-test-database.md](docs/isolated-test-database.md). If that
-explicit setup is unavailable, it reports the backend phase as `SKIPPED` and
-exits nonzero rather than using the development database or reporting overall
-success. It never starts Docker or runs migrations.
-
-Run frontend tests independently from `frontend`:
+It runs frontend tests and then runs backend Pytest only when the exact isolated
+test configuration is present. It does not start Docker or run migrations and
+fails rather than falling back to a development database. Focused frontend
+checks from `frontend` are:
 
 ```powershell
 npm run test -- --run
+npm run build
+npm run lint
 ```
 
-See [docs/testing-strategy.md](docs/testing-strategy.md) for frontend mocking,
-backend database safety, runner exit behavior, and current coverage limits.
+Backend lint from `backend`:
 
-### Continuous integration
+```powershell
+uv run --no-sync ruff check app tests migrations/versions
+```
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pushes and pull
-requests targeting `main`. The frontend job runs `npm ci`, Vitest, the Vite
-production build, and Oxlint. The backend job creates an ephemeral PostgreSQL
-16 service mapped to the exact tuple required by the fail-closed test guard,
-applies Alembic through the guarded test wrapper, then runs Pytest and Ruff.
-It uses only synthetic CI credentials and never targets a development database.
+## Deployment and Operations
 
-For remote results, inspect the [GitHub Actions workflow runs](https://github.com/imend35/ai-bap/actions)
-and confirm that each run's head SHA matches the revision being evaluated.
-Historical successful runs do not establish the status of a newer commit. The
-local 589-test result above is not presented as a GitHub Actions result.
+The Render Free deployment uses the repository's
+[`render.free.yaml`](render.free.yaml): managed PostgreSQL, a Docker-based
+FastAPI web service, and a static React frontend. The API health route and
+configured Render health check are `/api/v1/health`.
 
-## Render Free Deployment
+Automatic deploy triggers are off. The Product Owner reviews the intended
+commit and manually deploys the backend and frontend through the Render
+Dashboard; a Git push or CI success alone does not release the application.
+The Free backend startup wrapper runs the guarded production Alembic migration
+before launching the API and prevents startup if that step fails. No production
+migration or database operation is authorized by these instructions.
 
-The live demo uses the separate [`render.free.yaml`](render.free.yaml)
-configuration for managed PostgreSQL, a Docker-based FastAPI web service, and
-a static frontend. Automatic deployment triggers are disabled; a repository
-change should not be interpreted as an automatic demo update. The paid
-[`render.yaml`](render.yaml) is a separate configuration. See the
-[Render Free deployment guide](docs/deployment-render-free.md) for configuration,
-migration safeguards, CORS, registration policy, administrator bootstrap,
-validation, and recovery limits.
+Render Free may cold-start after inactivity. The Free PostgreSQL plan has
+provider-defined storage and lifecycle limits and no managed backup guarantee;
+demonstration records must be synthetic and treated as disposable. Check
+current provider terms and the [deployment runbook](docs/deployment-render-free.md)
+before any operational action.
 
-## Security Considerations
+The Product Owner reports that the published services were smoke-tested at
+`75833f9`. The tests listed in the
+[Final Submission Report](docs/FINAL_SUBMISSION_REPORT.md) are supplied
+evidence, not an assertion that this README task re-ran them. No automatic
+continuous deployment is claimed.
 
-- Keep `.env`, test-only passwords, JWT secrets, API keys, private keys, and
-  database backups out of version control.
-- Use only the isolated test database procedure for database-backed tests.
-- Use the interactive administrator bootstrap process described in
-  [docs/bootstrap-admin.md](docs/bootstrap-admin.md) rather than passing
-  administrator passwords on a command line.
-- The backend validates external input, hashes passwords, checks JWT identity,
-  enforces server-side roles, and protects archived projects from writes.
-- Public self-registration is disabled in the Render Free configuration;
-  protected features require authorized login. Never place evaluator
-  credentials in this README, the frontend bundle, or public URLs.
-- Treat user requirements and AI output as untrusted input. Generated stories
-  are not saved until a human has reviewed and explicitly confirmed them.
+## Security and Known Limitations
 
-## Evaluation Evidence
+- Passwords are hashed with Argon2id; API access uses JWTs and backend route
+  authorization. UI controls are not the security boundary.
+- Demo identities are not confirmed active. Credentials must be delivered
+  privately by the Product Owner after account and security verification.
+- The workspace is shared and has no tenant isolation. Do not expose shared
+  credentials publicly or use real, personal, confidential, or production data.
+- Live AI generation for the designated demo identities is implemented in
+  source but has not been verified against the live service. Non-demo
+  generation requires the appropriate role and a configured external provider.
+- Render Free cold starts, database lifecycle, and recovery limits apply.
+- The published `75833f9` evidence does not establish fully correlated
+  end-to-end metrics, traces, and structured logs viewable in a UI. A local
+  observability draft is not runtime-verified. User-impact alerting and an
+  alert-triggered on-call responder are not implemented and demonstrated.
+- Saved stories do not have reliable AI provenance. AI-generated material is
+  a draft and requires human review; the application does not support BYOK.
 
-- [Agent team specification](docs/agent-team.md) and
-  [agent workflow](docs/agent-workflow.md)
-- [Product specification](product-spec.md),
-  [project charter](docs/project-charter.md), and
-  [architecture](docs/architecture.md)
-- [Task tracker plan](docs/github-issues-plan.md) and
+## Documentation and Further Reading
+
+- [User Guide](docs/USER_GUIDE.md) — screens, roles, and end-to-end workflows
+- [Product Specification](product-spec.md) and
+  [Project Charter](docs/project-charter.md)
+- [Architecture](docs/architecture.md) and [OpenAPI contract](openapi.yaml)
+- [Agent Team](docs/agent-team.md), [agent workflow](docs/agent-workflow.md),
+  and [Agent instructions](AGENTS.md)
+- [Testing Strategy](docs/testing-strategy.md) and
+  [isolated test database](docs/isolated-test-database.md)
+- [Render Free deployment guide](docs/deployment-render-free.md)
+- [Authoritative course rubric](docs/Project.md)
+- [Final Submission Report](docs/FINAL_SUBMISSION_REPORT.md)
+- [Public task-tracker plan](docs/github-issues-plan.md) and
   [GitHub Issue #2](https://github.com/imend35/ai-bap/issues/2)
-- [Agent development instructions](AGENTS.md)
-- [Backend tests](backend/tests/) and the
-  [frontend test suite](frontend/src/App.test.tsx)
-- [API contract](openapi.yaml)
-- Docker configuration: [full-stack Compose](compose.yaml),
-  [isolated test Compose](compose.test.yaml), and
-  [disposable regression Compose](compose.regression-test.yaml)
-- Render configuration and instructions:
-  [Free Blueprint](render.free.yaml) and
-  [deployment guide](docs/deployment-render-free.md)
-- [GitHub Actions CI workflow](.github/workflows/ci.yml)
+- [Docker Compose](compose.yaml) and [GitHub Actions CI](.github/workflows/ci.yml)
 
-## Known Limitations
+## Submission and Peer Review
 
-- The Render Free demo is intended for evaluation, not production use. Free
-  services may restart or spin down, and the associated free database has
-  provider-specific retention limits; see the deployment guide and current
-  Render documentation.
-- CI provides validation; automatic continuous deployment is not configured.
-- Correlated end-to-end observability, user-impact alerting, and an on-call
-  responder agent are not established and are not claimed.
-- A prior Oxlint run reported 16 warnings and no errors. Review current output
-  before treating that count as current.
-- Full-stack Compose has local runtime evidence, but that is not production
-  deployment evidence.
-- The optional AI draft generator depends on an explicitly configured OpenAI
-  API key and external provider availability.
-
-## Future Improvements
-
-- Expand frontend component and workflow tests.
-- Add and maintain deployment-specific smoke tests; any continuous-deployment
-  strategy requires separate review and evidence.
-- Refactor frontend loading state with regression coverage to address lint
-  warnings after confirming the current findings.
-- Improve correlated observability, user-impact alerting, and on-call
-  procedures before making operational-readiness claims.
+The self-assessed rubric estimate is **17/24**, not an official grade. The
+course also requires completing **three peer reviews** of other participants'
+projects. Their completion is **NOT VERIFIED** here and is a separate
+submission requirement; project points do not replace it. See
+[`docs/Project.md`](docs/Project.md) for the authoritative rule and the
+[Final Submission Report](docs/FINAL_SUBMISSION_REPORT.md) for the evidence
+assessment and outstanding limitations.
