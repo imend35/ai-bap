@@ -55,10 +55,10 @@ demo identities:
 
 **Live Application:** https://ai-bap-frontend-free.onrender.com
 
-| Role | Email |
-|---|---|
-| Business Analyst | `banlyst@example.com` |
-| Reviewer | `reviwer@example.com` |
+| Role | Email | Password |
+|---|---|---|
+| Business Analyst | `banlyst@example.com` | BanlystDemoUser |
+| Reviewer | `reviwer@example.com` | ReviewerDemoUser |
 
 The Product Owner reports that both roles have previously passed live-login
 verification. This is historical verification and does not guarantee current
