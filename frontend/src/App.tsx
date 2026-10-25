@@ -438,6 +438,12 @@ function App() {
     useState<RequirementStatus>("draft");
   const canCreateContent =
     currentUser?.role === "admin" || currentUser?.role === "business_analyst";
+  const isPublicDemoAiRestrictedUser = [
+    "banlyst@example.com",
+    "reviwer@example.com",
+  ].includes(currentUser?.email.trim().toLowerCase() ?? "");
+  const canGenerateAiDraft =
+    canCreateContent && !isPublicDemoAiRestrictedUser;
   const canManageProjectArchive = currentUser?.role === "admin";
   const selectedTaskStory =
     deliveryStories.find((story) => story.id === selectedTaskStoryId) ?? null;
@@ -1467,7 +1473,13 @@ function App() {
   }
 
   async function handleGenerateStory() {
-    if (!storyRequirementId || !isStoryProjectWritable) return;
+    if (
+      !storyRequirementId ||
+      !isStoryProjectWritable ||
+      !canGenerateAiDraft
+    ) {
+      return;
+    }
     setIsGenerating(true);
     setError("");
     setSuccess("");
@@ -4017,11 +4029,19 @@ function App() {
                   <button
                     className="primary-button"
                     type="button"
-                    disabled={isGenerating || isSaving}
+                    disabled={
+                      isGenerating || isSaving || !canGenerateAiDraft
+                    }
                     onClick={() => void handleGenerateStory()}
                   >
                     {isGenerating ? "Generating..." : "✦ Generate AI Draft"}
                   </button>
+                  {isPublicDemoAiRestrictedUser && (
+                    <p className="form-description" role="note">
+                      Live AI generation is unavailable for public demo
+                      accounts. You can create User Stories manually.
+                    </p>
+                  )}
                 </div>
               )}
               {canCreateContent &&

@@ -51,6 +51,14 @@ ALLOWED_STATUS_TRANSITIONS = {
     "approved": set(),
 }
 
+# I restrict live generation for the designated public demo identities only.
+PUBLIC_DEMO_AI_BLOCKED_EMAILS = frozenset(
+    {"banlyst@example.com", "reviwer@example.com"}
+)
+PUBLIC_DEMO_AI_BLOCKED_DETAIL = (
+    "Live AI generation is unavailable for public demo accounts."
+)
+
 
 @router.get(
     "",
@@ -170,15 +178,23 @@ def create_user_story(
     "/generate",
     response_model=AIUserStoryGenerateResponse,
     status_code=status.HTTP_200_OK,
-    dependencies=[
-        Depends(require_roles(ADMIN, BUSINESS_ANALYST))
-    ],
 )
 def generate_user_story_draft(
     payload: AIUserStoryGenerateRequest,
     db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[
+        User,
+        Depends(require_roles(ADMIN, BUSINESS_ANALYST)),
+    ],
 ) -> AIUserStoryGenerateResponse:
     """I generate an AI-assisted user story draft without saving it."""
+
+    # I enforce the public-demo restriction before looking up or changing data.
+    if current_user.email.strip().lower() in PUBLIC_DEMO_AI_BLOCKED_EMAILS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=PUBLIC_DEMO_AI_BLOCKED_DETAIL,
+        )
 
     project_id = resolve_project_id_for_requirement(db, payload.requirement_id)
 

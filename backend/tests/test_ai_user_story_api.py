@@ -9,7 +9,7 @@ from fastapi import status
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-from app.database import SessionLocal
+from app.database import SessionLocal, get_db
 from app.main import app
 from app.models import Project, Requirement, UserStory
 from app.role_permissions import ADMIN, BUSINESS_ANALYST, REVIEWER
@@ -26,9 +26,10 @@ WRITE_ROLES = [ADMIN, BUSINESS_ANALYST]
 class MockUser:
     """I represent an authenticated user with a selected role."""
 
-    def __init__(self, role: str):
+    def __init__(self, role: str, email: str = "test-user@example.test"):
         self.id = uuid4()
         self.role = role
+        self.email = email
         self.is_active = True
 
 
@@ -38,20 +39,22 @@ def client():
 
     # I remove authentication overrides left by previous tests.
     app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_db, None)
 
     with TestClient(app) as test_client:
         yield test_client
 
     # I restore the original authentication behavior after each test.
     app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.fixture
 def authenticate():
     """I simulate an authenticated user with the selected role."""
 
-    def set_role(role: str):
-        user = MockUser(role)
+    def set_role(role: str, email: str = "test-user@example.test"):
+        user = MockUser(role, email)
 
         # I override the current-user dependency for role-based testing.
         app.dependency_overrides[get_current_user] = lambda: user
@@ -124,6 +127,103 @@ def test_generate_user_story_for_missing_requirement(
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.json()["detail"] == "Requirement not found."
+
+
+@pytest.mark.parametrize(
+    ("role", "email"),
+    [
+        (BUSINESS_ANALYST, "banlyst@example.com"),
+        (BUSINESS_ANALYST, " ReViWeR@Example.com "),
+        (REVIEWER, "reviwer@example.com"),
+    ],
+)
+def test_public_demo_accounts_cannot_generate_user_stories(
+    client, authenticate, role, email
+):
+    """I block exact demo identities before requirement access or AI use."""
+
+    headers = authenticate(role, email)
+    app.dependency_overrides[get_db] = lambda: None
+
+    with patch(
+        "app.routers.user_stories.generate_user_story"
+    ) as mocked_generator, patch(
+        "app.routers.user_stories.resolve_project_id_for_requirement"
+    ) as mocked_requirement_lookup:
+        response = client.post(
+            GENERATE_URL,
+            json={"requirement_id": str(uuid4())},
+            headers=headers,
+        )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    if role == REVIEWER:
+        assert response.json()["detail"] == (
+            "You do not have permission to perform this action."
+        )
+    else:
+        assert response.json()["detail"] == (
+            "Live AI generation is unavailable for public demo accounts."
+        )
+    mocked_generator.assert_not_called()
+    mocked_requirement_lookup.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("role", "email"),
+    [
+        (BUSINESS_ANALYST, "banlyst+other@example.com"),
+        (ADMIN, "admin@example.test"),
+    ],
+)
+def test_non_demo_authorized_users_can_generate_user_stories(
+    client, authenticate, role, email
+):
+    """I preserve generation for authorized non-demo users."""
+
+    requirement_id = uuid4()
+    headers = authenticate(role, email)
+    requirement = type(
+        "RequirementStub",
+        (),
+        {
+            "id": requirement_id,
+            "title": "User Login",
+            "description": "Users must be able to log in securely.",
+            "priority": "high",
+        },
+    )()
+
+    class DatabaseStub:
+        def get(self, model, selected_id):
+            assert selected_id == requirement_id
+            return requirement
+
+        def commit(self):
+            return None
+
+    app.dependency_overrides[get_db] = lambda: DatabaseStub()
+    generated_story = GeneratedUserStory(
+        title="Secure User Login",
+        description="A reviewed draft.",
+        acceptance_criteria=["Given valid credentials, access is granted."],
+    )
+
+    with patch(
+        "app.routers.user_stories.generate_user_story",
+        return_value=generated_story,
+    ) as mocked_generator, patch(
+        "app.routers.user_stories.resolve_project_id_for_requirement",
+        return_value=uuid4(),
+    ), patch("app.routers.user_stories.lock_writable_project"):
+        response = client.post(
+            GENERATE_URL,
+            json={"requirement_id": str(requirement_id)},
+            headers=headers,
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    mocked_generator.assert_called_once()
 
 
 @pytest.mark.parametrize("role", WRITE_ROLES)
@@ -232,13 +332,11 @@ def test_generate_user_story_rejects_invalid_token(client):
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-def test_reviewer_cannot_generate_user_story(
-    client, authenticate, requirement_factory
-):
+def test_reviewer_cannot_generate_user_story(client, authenticate):
     """I verify that reviewers cannot invoke AI generation."""
 
-    requirement_id = requirement_factory()
     headers = authenticate(REVIEWER)
+    app.dependency_overrides[get_db] = lambda: None
 
     # I ensure that the AI generator is never called for a forbidden role.
     with patch(
@@ -246,7 +344,7 @@ def test_reviewer_cannot_generate_user_story(
     ) as mocked_generator:
         response = client.post(
             GENERATE_URL,
-            json={"requirement_id": str(requirement_id)},
+            json={"requirement_id": str(uuid4())},
             headers=headers,
         )
 

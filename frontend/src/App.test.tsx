@@ -38,6 +38,30 @@ const testBusinessAnalyst = {
   role: "business_analyst",
   is_active: true,
 };
+const testRequirement = {
+  id: "requirement-1",
+  record_number: "REQ-001",
+  created_by: null,
+  project_id: testProject.id,
+  title: "Account access",
+  description: "A synthetic requirement.",
+  priority: "high",
+  status: "draft",
+  created_at: "2026-10-01T00:00:00Z",
+  updated_at: "2026-10-01T00:00:00Z",
+};
+const testSavedStory = {
+  id: "story-1",
+  record_number: "STY-001",
+  created_by: null,
+  requirement_id: testRequirement.id,
+  title: "Reviewable synthetic story",
+  description: "A saved synthetic story.",
+  acceptance_criteria: ["Given a reviewer, when reviewing, then decide."],
+  status: "in_review",
+  created_at: "2026-10-01T00:00:00Z",
+  updated_at: "2026-10-01T00:00:00Z",
+};
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -54,7 +78,7 @@ function mockAuthenticatedSession(
   fetchMock: ReturnType<typeof vi.fn>,
   projectsResponse: (url: string) => Response | Promise<Response> = () =>
     paginatedResponse(),
-  currentUser = {
+  currentUser: Record<string, unknown> = {
     id: "admin-1",
     record_number: "USR-001",
     email: "admin@example.test",
@@ -73,6 +97,44 @@ function mockAuthenticatedSession(
     }
     if (url.includes("/api/v1/projects")) return projectsResponse(url);
     return paginatedResponse();
+  });
+}
+
+function mockUserStorySession(
+  fetchMock: ReturnType<typeof vi.fn>,
+  currentUser: Record<string, unknown>,
+  generatedResponse?: Response,
+) {
+  mockAuthenticatedSession(
+    fetchMock,
+    (url) =>
+      url.includes("/api/v1/projects/")
+        ? jsonResponse(testProject)
+        : paginatedResponse([testProject]),
+    currentUser,
+  );
+  const authenticatedFetch = fetchMock.getMockImplementation() as unknown as (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>;
+  fetchMock.mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (url.includes("/api/v1/requirements?")) {
+      return paginatedResponse([testRequirement]);
+    }
+    if (
+      url.endsWith("/api/v1/user-stories") &&
+      init?.method === "POST"
+    ) {
+      return jsonResponse({});
+    }
+    if (url.includes("/api/v1/user-stories/generate") && generatedResponse) {
+      return generatedResponse;
+    }
+    if (url.includes("/api/v1/user-stories?")) {
+      return paginatedResponse([testSavedStory]);
+    }
+    return authenticatedFetch(input as RequestInfo | URL, init);
   });
 }
 
@@ -279,5 +341,128 @@ describe("AI BAP authentication and workspace", () => {
       expect.stringContaining("/api/v1/projects?archived=false&limit=10"),
       expect.objectContaining({ headers: expect.any(Headers) }),
     );
+  });
+
+  it("disables live AI generation for the public demo analyst but keeps manual stories available", async () => {
+    const fetchMock = vi.mocked(fetch);
+    const publicAnalyst = {
+      ...testBusinessAnalyst,
+      email: "  Banlyst@Example.com ",
+    };
+    mockUserStorySession(fetchMock, publicAnalyst);
+    render(<App />);
+
+    const user = await signInAsTestBusinessAnalyst();
+    await user.click(screen.getByRole("button", { name: /user stories/i }));
+    await user.selectOptions(screen.getByLabelText("Project"), testProject.id);
+    await user.selectOptions(
+      await screen.findByLabelText("Requirement"),
+      testRequirement.id,
+    );
+
+    const generateButton = await screen.findByRole("button", {
+      name: /generate ai draft/i,
+    });
+    expect(generateButton).toBeDisabled();
+    expect(
+      screen.getByRole("note"),
+    ).toHaveTextContent("Live AI generation is unavailable for public demo accounts.");
+    expect(await screen.findByText("Reviewable synthetic story")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /new user story/i }));
+    await user.type(screen.getByLabelText("Title", { selector: "input" }), "Manual demo story");
+    await user.type(
+      screen.getByLabelText("Description", { selector: "textarea" }),
+      "Manually entered synthetic content.",
+    );
+    await user.click(screen.getByRole("button", { name: "Save as Draft" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "User story saved as Draft.",
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/user-stories") &&
+          init?.method === "POST",
+      ),
+    ).toBe(true);
+
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/api/v1/user-stories/generate"),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps saved stories and reviewer decisions available without an AI action", async () => {
+    const fetchMock = vi.mocked(fetch);
+    const publicReviewer = {
+      id: "reviewer-1",
+      record_number: "USR-003",
+      email: "reviwer@example.com",
+      full_name: "Demo Reviewer",
+      role: "reviewer",
+      is_active: true,
+    };
+    mockUserStorySession(fetchMock, publicReviewer);
+    render(<App />);
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Email address"), publicReviewer.email);
+    await user.type(screen.getByLabelText("Password"), "synthetic-test-password");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await screen.findByText(/Demo Reviewer.*USR-003.*Reviewer/);
+    await user.click(screen.getByRole("button", { name: /user stories/i }));
+    await user.selectOptions(screen.getByLabelText("Project"), testProject.id);
+    await user.selectOptions(
+      await screen.findByLabelText("Requirement"),
+      testRequirement.id,
+    );
+
+    expect(await screen.findByText("Reviewable synthetic story")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: /generate ai draft/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/api/v1/user-stories/generate"),
+      ),
+    ).toBe(false);
+  });
+
+  it("preserves AI generation for a non-demo Business Analyst", async () => {
+    const fetchMock = vi.mocked(fetch);
+    mockUserStorySession(
+      fetchMock,
+      testBusinessAnalyst,
+      jsonResponse({
+          requirement_id: testRequirement.id,
+          title: "Mocked AI draft",
+          description: "A synthetic generated draft.",
+          acceptance_criteria: ["Given a request, when processed, then respond."],
+          requires_human_review: true,
+          saved_to_database: false,
+        }),
+    );
+    render(<App />);
+
+    const user = await signInAsTestBusinessAnalyst();
+    await user.click(screen.getByRole("button", { name: /user stories/i }));
+    await user.selectOptions(screen.getByLabelText("Project"), testProject.id);
+    await user.selectOptions(
+      await screen.findByLabelText("Requirement"),
+      testRequirement.id,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /generate ai draft/i }),
+    );
+
+    expect(await screen.findByText(/AI draft generated/)).toBeVisible();
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith("/api/v1/user-stories/generate"),
+      ),
+    ).toHaveLength(1);
   });
 });
