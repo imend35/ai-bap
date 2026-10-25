@@ -341,26 +341,3 @@ all use `/api/v1/health`. See [the final submission report](FINAL_SUBMISSION_REP
 ## Known hosting limitations
 
 The repository's Render Free deployment guide describes the demo as short-lived and non-production. It documents Free services as subject to cold starts and the Free PostgreSQL database as limited in size and lifecycle, with no managed backups; the guide advises treating demonstration data as disposable and checking the provider's current limits. These are configuration/documentation caveats, not a live status check. Allow time for a sleeping API service to wake, and do not rely on the demo database as durable storage.
-
-## Screenshot plan
-
-The following are placeholders for future genuine screenshots. No image files are included or implied. Save approved, redacted captures under `docs/images/user-guide/`; use synthetic data and omit credentials, personal information, tokens, and secrets.
-
-| Screen/state | Future screenshot filename |
-|---|---|
-| Sign In | `docs/images/user-guide/user-guide-01-sign-in.png` |
-| Dashboard | `docs/images/user-guide/user-guide-02-dashboard.png` |
-| Project list | `docs/images/user-guide/user-guide-03-project-list.png` |
-| Project form | `docs/images/user-guide/user-guide-04-project-form.png` |
-| Requirements | `docs/images/user-guide/user-guide-05-requirements.png` |
-| User Story list and review | `docs/images/user-guide/user-guide-06-story-list-and-review.png` |
-| Manual User Story form | `docs/images/user-guide/user-guide-07-manual-story-form.png` |
-| Disabled AI Generate | `docs/images/user-guide/user-guide-08-ai-demo-disabled.png` |
-| Approval audit history | `docs/images/user-guide/user-guide-09-approval-audit.png` |
-| Delivery and sprints | `docs/images/user-guide/user-guide-10-delivery-sprints.png` |
-| Task management | `docs/images/user-guide/user-guide-11-task-management.png` |
-| Traceability | `docs/images/user-guide/user-guide-12-traceability.png` |
-| Validation and empty states | `docs/images/user-guide/user-guide-13-validation-and-empty-states.png` |
-| Admin project archive/restore | `docs/images/user-guide/user-guide-14-admin-project-archive.png` |
-
-The Admin-only capture requires an authorized Admin session. The disabled-AI capture requires a designated demo identity after its availability is verified. Do not use fabricated UI images or imply production verification through screenshots.
