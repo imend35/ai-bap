@@ -61,7 +61,8 @@ The current React interface has no account registration or user-administration s
 
 **Related screens:** Dashboard and all authenticated sections.
 
-> Screenshot placeholder — `docs/images/user-guide/user-guide-01-sign-in.png` (capture after a real, authorized UI session).
+> Screenshot placeholder :
+<img width="944" height="512" alt="image" src="https://github.com/user-attachments/assets/1e81bce1-63ce-4235-a9f2-8f92c5cfa93f" />
 
 ## Dashboard
 
@@ -88,7 +89,8 @@ Recent Projects shows the currently loaded page of projects. After selecting a p
 
 **Related screens:** Projects, Requirements, User Stories, Delivery, and Traceability.
 
-> Screenshot placeholder — `docs/images/user-guide/user-guide-02-dashboard.png`.
+> Screenshot placeholder:
+<img width="941" height="504" alt="image" src="https://github.com/user-attachments/assets/f80edda0-2da9-4d50-9ada-64c7ae372560" />
 
 ## Projects
 
@@ -122,7 +124,8 @@ The form contains:
 
 **Related screens:** Projects appear in Dashboard, Requirements, User Stories, Traceability, and Delivery selectors.
 
-> Screenshot placeholders — `docs/images/user-guide/user-guide-03-project-list.png` and `docs/images/user-guide/user-guide-04-project-form.png`.
+> Screenshot placeholders:
+<img width="950" height="513" alt="image" src="https://github.com/user-attachments/assets/5c02fd3f-1774-4f1f-a25f-96822ff8f4e6" />
 
 ## Requirements
 
@@ -150,7 +153,8 @@ The form contains:
 
 **Related screens:** User Stories, Delivery, Dashboard, and Traceability.
 
-> Screenshot placeholder — `docs/images/user-guide/user-guide-05-requirements.png`.
+> Screenshot placeholder :
+<img width="951" height="467" alt="image" src="https://github.com/user-attachments/assets/4338afb2-8945-4038-b44e-41f696785874" />
 
 ## User Stories
 
@@ -199,7 +203,10 @@ The saved list shows story identity/title, description, acceptance criteria, sta
 
 **Related screens:** Requirements, Traceability, Delivery (tasks require an approved story), and approval audit history.
 
-> Screenshot placeholders — `docs/images/user-guide/user-guide-06-story-list-and-review.png`, `docs/images/user-guide/user-guide-07-manual-story-form.png`, `docs/images/user-guide/user-guide-09-approval-audit.png`.
+> Screenshot placeholders :
+<img width="941" height="470" alt="image" src="https://github.com/user-attachments/assets/22c98b5e-b55d-4075-a577-79dfadf35152" />
+
+<img width="578" height="416" alt="image" src="https://github.com/user-attachments/assets/7ef826dd-2e8a-42db-be48-a8fa3c094c4f" />
 
 ## Traceability
 
@@ -223,7 +230,8 @@ The saved list shows story identity/title, description, acceptance criteria, sta
 
 **Related screens:** Requirements, User Stories, Delivery, and Dashboard.
 
-> Screenshot placeholder — `docs/images/user-guide/user-guide-12-traceability.png`.
+> Screenshot placeholder :
+<img width="934" height="506" alt="image" src="https://github.com/user-attachments/assets/6dba924c-b91c-4440-a1a0-fc4420813375" />
 
 ## Delivery
 
@@ -267,7 +275,10 @@ For Admin and Business Analyst, the task table provides **Change status for [tas
 
 **Related screens:** User Stories, Requirements, Dashboard, and Traceability.
 
-> Screenshot placeholders — `docs/images/user-guide/user-guide-10-delivery-sprints.png` and `docs/images/user-guide/user-guide-11-task-management.png`.
+> Screenshot placeholders :
+<img width="940" height="482" alt="image" src="https://github.com/user-attachments/assets/964b0577-a7cb-4a24-b8f6-e76b895bfb11" />
+<img width="764" height="374" alt="image" src="https://github.com/user-attachments/assets/527db40b-86ce-45bb-a1fb-61e451a492b9" />
+
 
 ## Pagination, loading, empty, and error states
 
@@ -276,8 +287,6 @@ Project, requirement, story, and traceability collections may be paginated. Use 
 During a request, the relevant button or section may show a loading label or disabled state. Empty-state messages mean the current selection/filter has no items to display; they are not an indication that another user's data is private. Error messages appear near the affected panel and may provide **Retry projects**, **Retry dashboard**, **Retry traceability**, **Retry requirements**, **Retry user stories**, **Retry sprints**, **Retry sprint options**, or **Retry tasks**. Retry only the failed read unless the UI explicitly indicates that a write failed; after an ambiguous write result, inspect the list before submitting again to avoid duplicates.
 
 Some actions use a browser confirmation prompt (project archive/restore and story review transitions). Read the prompt before confirming.
-
-> Screenshot placeholder — `docs/images/user-guide/user-guide-13-validation-and-empty-states.png`.
 
 ## Public demo and data safety
 
