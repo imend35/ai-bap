@@ -53,9 +53,13 @@ Frontend automated tests are implemented. The repository includes a GitHub
 Actions CI workflow for frontend and backend validation. The push-triggered
 workflow run for commit `1e4333738947f131816901b9fdb71e4fff61d4f2` and the
 pull-request-triggered workflow run for commit
-`d88973895dced732e6aa7f00e4da5847ed0ba3d4` completed successfully. Public
-deployment and OpenTelemetry instrumentation are not currently evidenced by
-this repository.
+`d88973895dced732e6aa7f00e4da5847ed0ba3d4` completed successfully. The
+repository also contains Render deployment configuration and a manual
+deployment guide. The Final Submission Report records the Product Owner's
+confirmation of a deployment at `75833f9` and a healthy `/api/v1/health`
+response; this document does not independently verify current public service
+availability or demo-account login. Render deployment is manual, not automatic
+CD. Complete, runtime-verified OpenTelemetry instrumentation is not claimed.
 
 ## 4. Application Modules
 
@@ -158,14 +162,23 @@ archive semantics, and supported API groups.
 
 ## 10. Runtime and Deployment Position
 
-The local Compose runtime starts the full application with
-`docker compose up --build -d`. Published ports are loopback-bound, and no
-public deployment or cloud topology is claimed. The repository includes a
-GitHub Actions CI workflow for frontend and backend validation. The
-push-triggered workflow run for commit `1e4333738947f131816901b9fdb71e4fff61d4f2`
-and the pull-request-triggered workflow run for commit
-`d88973895dced732e6aa7f00e4da5847ed0ba3d4` completed successfully. The stack
-is a local reproducibility topology, not deployment evidence.
+The local Compose runtime is defined to start PostgreSQL, a one-shot fresh
+schema migration initializer, the FastAPI API, and the frontend with
+`docker compose up --build -d`. Published ports are loopback-bound. Prior
+local runtime evidence is recorded in
+[`adm_8.10.82.md`](codex-reports/adm_8.10.82.md) and
+[`adm_8.10.168.md`](codex-reports/adm_8.10.168.md); no fresh clean-machine
+reproduction is claimed here.
+
+The repository's [`render.free.yaml`](../render.free.yaml) and
+[Render Free deployment guide](deployment-render-free.md) describe the hosted
+topology and manual release process. The Final Submission Report records the
+Product Owner's confirmation that the Render services were deployed at
+`75833f9` and the health endpoint returned successfully. This is recorded
+owner-reported evidence, not an independent check of current service
+availability. The GitHub Actions workflow validates frontend and backend
+quality on pushes to `main` and pull requests; it does not deploy to Render.
+Automatic CD is not implemented.
 
 ## 11. Testing and Quality Position
 
@@ -191,8 +204,9 @@ mocked API responses, and the latest documented unified run passed 515 tests.
 ## 13. Future Improvements
 
 - Expand frontend component and workflow coverage.
-- Add deployment documentation and retain CI evidence with release records.
-- Verify the isolated full-stack Compose runtime.
+- Keep deployment documentation and release evidence current; repeat a clean
+  local runtime verification when the environment or Compose configuration
+  changes.
 - Refactor frontend loading state with regression tests to address retained
   Oxlint warnings.
 - Expand observability and operational evidence.

@@ -50,13 +50,14 @@ content. I do not treat AI output as automatically approved work.
 7. I added PostgreSQL migrations, backend tests, isolated-test-database guards,
    and backend/frontend quality checks.
 
-### Planned enhancements
+### Further work
 
-1. Add frontend automated tests and CI quality gates.
-2. Deliver a complete containerized frontend/backend runtime and deployment
-   workflow; the current main Compose file starts PostgreSQL only.
-3. Expand observability and operational evidence.
-4. Continue documenting reusable AI-development and agent-extension evidence.
+1. Expand observability and operational evidence, including user-impact
+   alerting and an alert-triggered responder; these are not claimed as
+   implemented or verified.
+2. Continue documenting reusable AI-development and agent-extension evidence.
+3. Revalidate the local full-stack runtime and hosted demo when the environment
+   or release changes.
 
 ## 5. Target Users
 
@@ -84,9 +85,10 @@ content. I do not treat AI output as automatically approved work.
 
 ### Out of scope or not yet evidenced
 
-- Public deployment.
-- CI/CD workflows.
-- Frontend automated tests.
+- Automatic deployment/CD: GitHub Actions CI is implemented, while Render
+  deployment is manually controlled.
+- Current live availability and successful demo-account login are not
+  independently verified by this charter.
 - Enterprise SSO, Jira synchronization, real-time collaboration, and advanced
   capacity forecasting.
 
@@ -121,8 +123,14 @@ Frontend automated tests and GitHub Actions CI are implemented. The
 push-triggered CI run for commit `1e4333738947f131816901b9fdb71e4fff61d4f2`
 and the pull-request-triggered CI run for commit
 `d88973895dced732e6aa7f00e4da5847ed0ba3d4` completed successfully. The
-full-stack Compose configuration exists, but its runtime has not yet been
-verified. Continuous deployment and public deployment are not implemented.
+committed full-stack Compose configuration and prior local runtime reports are
+documented in the README and `docs/FINAL_SUBMISSION_REPORT.md`; a fresh
+clean-environment reproduction is not claimed here. Render deployment
+configuration and a manual deployment guide are also committed. The Final
+Submission Report records the Product Owner's confirmation of deployment at
+`75833f9` and a healthy `/api/v1/health` response, but current public
+availability has not been independently checked. Continuous deployment is
+not implemented; Render deployment is manual.
 
 ## 9. Current Acceptance Position
 
@@ -141,19 +149,19 @@ documentation, and remaining limitations are reviewed together.
 | Test data reaches development data | The isolated PostgreSQL test procedure validates a separate database target before tests run. |
 | Secrets leak into source control | `.env` and common secret files are ignored; documentation uses placeholders only. |
 | External AI availability | Draft generation is optional and returns a controlled error when no API key is configured. |
-| Incomplete delivery automation | CI is verified for push and pull-request runs; continuous deployment, public deployment, and full-stack Compose runtime verification remain limitations. |
+| Incomplete delivery automation | GitHub Actions CI is configured for pushes and pull requests; Render deployment is manual and automatic CD is not implemented. Current live availability is not independently checked here. |
 
 ## 11. Deliverables
 
 I maintain the product specification, architecture document, README, OpenAPI
-contract, backend and frontend source, Alembic migrations, backend tests,
-Docker configuration, and operational guidance in this repository. Implemented
-frontend tests and CI are documented as completed deliverables. Deployment,
-continuous delivery, and agent-extension artifacts are not presented as
-completed deliverables.
+contract, backend and frontend source, Alembic migrations, backend and frontend
+tests, Docker configuration, and operational guidance in this repository.
+Render deployment configuration and its manual runbook are included. I do not
+present automatic continuous deployment, complete observability, user-impact
+alerting, or an autonomous on-call agent as completed deliverables.
 
 ## 12. Next Step
 
-My next priority is final submission preparation: review the complete working
-tree, retain only intended artifacts, verify the isolated full-stack Compose
-runtime, and validate the documented setup from a clean environment.
+My current priority is final submission and evidence review. The Compose
+configuration and prior local runtime reports support the documented local
+setup; a fresh clean-environment reproduction remains useful follow-up work.
